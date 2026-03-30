@@ -17,25 +17,23 @@ public:
 
    #if ! JucePlugin_PreferredChannelConfigurations
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override
-    {
-        return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
-    }
+    { return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo(); }
    #endif
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
-    bool hasEditor()              const override { return true; }
-    const juce::String getName() const override  { return JucePlugin_Name; }
-    bool acceptsMidi()            const override { return true; }
-    bool producesMidi()           const override { return false; }
-    bool isMidiEffect()           const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
-    int  getNumPrograms()               override { return 1; }
-    int  getCurrentProgram()            override { return 0; }
-    void setCurrentProgram(int)         override {}
+    bool  hasEditor()              const override { return true; }
+    const juce::String getName()   const override { return JucePlugin_Name; }
+    bool  acceptsMidi()            const override { return true; }
+    bool  producesMidi()           const override { return false; }
+    bool  isMidiEffect()           const override { return false; }
+    double getTailLengthSeconds()  const override { return 0.0; }
+    int   getNumPrograms()               override { return 1; }
+    int   getCurrentProgram()            override { return 0; }
+    void  setCurrentProgram(int)         override {}
     const juce::String getProgramName(int) override { return {}; }
-    void changeProgramName(int, const juce::String&) override {}
+    void  changeProgramName(int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&)          override;
     void setStateInformation (const void*, int sizeInBytes) override;
@@ -51,21 +49,19 @@ public:
     MidiLearnManager                   midiLearn { apvts };
     MacroLFO                           macroLFO;
 
-    // Tempo info (set from processBlock via PlayHead)
     std::atomic<double> currentBPM { 120.0 };
 
 private:
     SampleLibrary      sampleLibrary;
     juce::Synthesiser  synth;
-    juce::AudioFormatManager formatManager;
-    CharacterProcessor characterProcessor;
-    juce::CriticalSection    synthLock;
-    juce::MidiBuffer         pendingMidi;
+    juce::AudioFormatManager  formatManager;
+    CharacterProcessor        characterProcessor;
+    juce::CriticalSection     synthLock;
+    juce::MidiBuffer          pendingMidi;
     double currentSampleRate { 44100.0 };
 
-    bool   selectSample          (const juce::String& filePath, int rootNote);
-    void   updateVoiceParameters ();
-    void   applyMacroLFO         ();
+    bool selectSample          (const juce::String& filePath, int rootNote);
+    void updateVoiceParameters ();
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DustCrateAudioProcessor)

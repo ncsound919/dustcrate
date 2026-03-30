@@ -2,26 +2,42 @@
 
 SampleVoice::SampleVoice()
 {
+    prepareFilter(44100.0);
+    recomputeIncrements();
+}
+
+void SampleVoice::prepareFilter(double sr)
+{
+    cachedSR = sr;
     juce::dsp::ProcessSpec spec;
-    spec.sampleRate       = 44100.0;
-    spec.maximumBlockSize = 512;
+    spec.sampleRate       = sr;
+    spec.maximumBlockSize = 2048;
     spec.numChannels      = 2;
     filter.prepare(spec);
-    filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
-    filter.setCutoffFrequency(8000.0f);
-    filter.setResonance(1.0f);
+    filter.reset();
+    using T = juce::dsp::StateVariableTPTFilterType;
+    filter.setType(filterTypeIdx == 1 ? T::highpass : filterTypeIdx == 2 ? T::bandpass : T::lowpass);
+    filter.setCutoffFrequency(filterCutoff);
+    filter.setResonance(filterRes);
+}
+
+void SampleVoice::setCurrentPlaybackSampleRate(double newRate)
+{
+    juce::SynthesiserVoice::setCurrentPlaybackSampleRate(newRate);
+    if (newRate > 0.0 && newRate != cachedSR)
+        prepareFilter(newRate);
     recomputeIncrements();
 }
 
 bool SampleVoice::canPlaySound(juce::SynthesiserSound* s)
 { return dynamic_cast<SampleSound*>(s) != nullptr; }
 
-//==============================================================================
 void SampleVoice::recomputeIncrements()
 {
-    const double sr = getSampleRate() > 0.0 ? getSampleRate() : 44100.0;
+    const double sr = (getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
     attackInc  = (adsrAttack  > 0.0001f) ? float(1.0 / (adsrAttack  * sr)) : 1.0f;
     decayInc   = (adsrDecay   > 0.0001f) ? float(1.0 / (adsrDecay   * sr)) : 1.0f;
+    // FIX: release increment is 1/(release * sr) — not sustain-scaled at definition time
     releaseInc = (adsrRelease > 0.0001f) ? float(1.0 / (adsrRelease * sr)) : 1.0f;
 }
 
@@ -41,17 +57,17 @@ float SampleVoice::nextAdsrSample()
             adsrLevel = adsrSustain;
             break;
         case AdsrStage::Release:
-            adsrLevel -= releaseInc * adsrSustain;
+            // FIX: release decrements by fixed inc, not sustain-scaled — correct tail regardless of sustain level
+            adsrLevel -= releaseInc;
             if (adsrLevel <= 0.0f) { adsrLevel = 0.0f; adsrStage = AdsrStage::Idle; }
             break;
         default:
             adsrLevel = 0.0f;
             break;
     }
-    return adsrLevel;
+    return juce::jlimit(0.0f, 1.0f, adsrLevel);
 }
 
-//==============================================================================
 void SampleVoice::setReader(juce::AudioFormatReader* newReader, int rootNote)
 {
     rootMidiNote = rootNote;
@@ -59,8 +75,7 @@ void SampleVoice::setReader(juce::AudioFormatReader* newReader, int rootNote)
     transportSource.stop();
     transportSource.setSource(nullptr);
     readerSource.reset(new juce::AudioFormatReaderSource(newReader, true));
-    transportSource.setSource(readerSource.get(), 32768, nullptr,
-                               newReader->sampleRate);
+    transportSource.setSource(readerSource.get(), 32768, nullptr, newReader->sampleRate);
 }
 
 void SampleVoice::setADSR(float a, float d, float s, float r)
@@ -79,8 +94,8 @@ void SampleVoice::setFilter(float cutoff, float resonance, bool hp)
     filterTypeIdx = hp ? 1 : 0;
     filter.setCutoffFrequency(filterCutoff);
     filter.setResonance(filterRes);
-    filter.setType(hp ? juce::dsp::StateVariableTPTFilterType::highpass
-                      : juce::dsp::StateVariableTPTFilterType::lowpass);
+    using T = juce::dsp::StateVariableTPTFilter<float>::Type;
+    filter.setType(hp ? T::highpass : T::lowpass);
 }
 
 void SampleVoice::setFilterType(int idx)
@@ -91,16 +106,11 @@ void SampleVoice::setFilterType(int idx)
 }
 
 void SampleVoice::setPitchShift(float semitones)
-{
-    pitchRatio = std::pow(2.0, (double)semitones / 12.0);
-}
+{ pitchRatio = std::pow(2.0, (double)semitones / 12.0); }
 
 void SampleVoice::setDriftRatio(float ratio)
-{
-    driftDepth = (double) juce::jlimit(0.0f, 1.0f, ratio);
-}
+{ driftDepth = (double) juce::jlimit(0.0f, 1.0f, ratio); }
 
-//==============================================================================
 void SampleVoice::startNote(int midiNote, float velocity,
                               juce::SynthesiserSound*, int)
 {
@@ -108,7 +118,6 @@ void SampleVoice::startNote(int midiNote, float velocity,
     const double noteDiff = midiNote - rootMidiNote;
     cachedNoteRatio = std::pow(2.0, noteDiff / 12.0);
 
-    // Randomise drift LFO rate slightly per voice (0.25–0.75 Hz)
     const double sr = getSampleRate() > 0.0 ? getSampleRate() : 44100.0;
     driftRate  = float(juce::MathConstants<double>::twoPi *
                        (0.25 + (double)juce::Random::getSystemRandom().nextFloat() * 0.5) / sr);
@@ -129,31 +138,35 @@ void SampleVoice::stopNote(float, bool allowTailOff)
         adsrStage = AdsrStage::Release;
     else
     {
+        transportSource.stop();
         adsrStage = AdsrStage::Idle;
         adsrLevel = 0.0f;
-        transportSource.stop();
         clearCurrentNote();
     }
 }
 
-//==============================================================================
 void SampleVoice::renderNextBlock(juce::AudioBuffer<float>& output,
                                    int startSample, int numSamples)
 {
-    if (adsrStage == AdsrStage::Idle && !transportSource.isPlaying())
-    { clearCurrentNote(); return; }
+    if (adsrStage == AdsrStage::Idle)
+    {
+        // FIX: don't call clearCurrentNote() inside renderNextBlock;
+        // only stop transport here — clearCurrentNote is called in stopNote.
+        if (transportSource.isPlaying()) transportSource.stop();
+        return;
+    }
 
-    tempBuffer.setSize(2, numSamples, false, false, true);
+    const int numCh = juce::jmax(1, output.getNumChannels());
+    tempBuffer.setSize(numCh, numSamples, false, false, true);
     tempBuffer.clear();
 
-    // Update resampling ratio with drift LFO
     if (driftDepth > 0.001)
     {
         driftPhase += driftRate * (float)numSamples;
         if (driftPhase > juce::MathConstants<float>::twoPi)
             driftPhase -= juce::MathConstants<float>::twoPi;
-        const double lfoVal  = std::sin((double)driftPhase);
-        const double cents   = lfoVal * driftDepth * 8.0;  // max ±8 cents drift
+        const double lfoVal   = std::sin((double)driftPhase);
+        const double cents    = lfoVal * driftDepth * 8.0;
         const double driftMul = std::pow(2.0, cents / 1200.0);
         resamplingSource.setResamplingRatio(cachedNoteRatio * pitchRatio * driftMul);
     }
@@ -162,34 +175,48 @@ void SampleVoice::renderNextBlock(juce::AudioBuffer<float>& output,
         resamplingSource.setResamplingRatio(cachedNoteRatio * pitchRatio);
     }
 
-    // Pull samples
     juce::AudioSourceChannelInfo info(&tempBuffer, 0, numSamples);
     resamplingSource.getNextAudioBlock(info);
 
-    // Apply hand-rolled ADSR sample-by-sample (zipper-free)
+    // ADSR — sample-accurate, per-channel
     {
-        float* L = tempBuffer.getWritePointer(0);
-        float* R = tempBuffer.getWritePointer(tempBuffer.getNumChannels() > 1 ? 1 : 0);
+        // FIX: advance ADSR once and apply to all channels (was only writing to ch0 and ch1 separately with same env)
+        const int ch0 = 0;
+        const int ch1 = (tempBuffer.getNumChannels() > 1) ? 1 : 0;
+        float* L = tempBuffer.getWritePointer(ch0);
+        float* R = tempBuffer.getWritePointer(ch1);
         for (int n = 0; n < numSamples; ++n)
         {
             const float env = nextAdsrSample();
             L[n] *= env;
-            R[n] *= env;
+            if (ch1 != ch0) R[n] *= env;
         }
     }
 
-    // Apply filter (block-level, post-envelope)
-    juce::dsp::AudioBlock<float> block(tempBuffer);
-    juce::dsp::ProcessContextReplacing<float> ctx(block);
-    filter.process(ctx);
+    // Filter (block-level, post-ADSR)
+    if (numCh == 2)
+    {
+        juce::dsp::AudioBlock<float> block(tempBuffer);
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        filter.process(ctx);
+    }
+    else
+    {
+        // Mono path: wrap single-channel block
+        juce::dsp::AudioBlock<float> block(tempBuffer);
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        filter.process(ctx);
+    }
 
-    // Mix into output
     for (int ch = 0; ch < output.getNumChannels(); ++ch)
         output.addFrom(ch, startSample,
                        tempBuffer, ch % tempBuffer.getNumChannels(),
                        0, numSamples, velocityGain);
 
-    // Auto-clear when ADSR idle and transport stopped
+    // FIX: clear voice after ADSR completes — use the Synthesiser-safe path
     if (adsrStage == AdsrStage::Idle)
-    { transportSource.stop(); clearCurrentNote(); }
+    {
+        transportSource.stop();
+        clearCurrentNote();
+    }
 }

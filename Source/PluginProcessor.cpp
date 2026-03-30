@@ -10,6 +10,17 @@ DustCrateAudioProcessor::DustCrateAudioProcessor()
     formatManager.registerBasicFormats();
     for (int i = 0; i < 16; ++i) synth.addVoice(new SampleVoice());
     synth.addSound(new SampleSound());
+
+    // Point SampleLibrary at the bundled assets folder
+    const juce::File exe = juce::File::getSpecialLocation(juce::File::currentApplicationFile);
+    const juce::File assets = exe.getSiblingFile("assets").getChildFile("samples");
+    sampleLibrary.setAssetsRoot(assets);
+
+    // Load factory pack if present
+    const juce::File factoryJSON = exe.getSiblingFile("assets")
+                                      .getChildFile("factory_pack.json");
+    if (factoryJSON.existsAsFile())
+        sampleLibrary.loadPackFromJSON(factoryJSON);
 }
 
 DustCrateAudioProcessor::~DustCrateAudioProcessor() {}
@@ -17,7 +28,7 @@ DustCrateAudioProcessor::~DustCrateAudioProcessor() {}
 void DustCrateAudioProcessor::prepareToPlay(double sr, int blockSize)
 {
     currentSampleRate = sr;
-    synth.setCurrentPlaybackSampleRate(sr);
+    synth.setCurrentPlaybackSampleRate(sr); // propagates to each SampleVoice via setCurrentPlaybackSampleRate override
     characterProcessor.prepare(sr, blockSize);
     macroLFO.prepare(sr);
 }
@@ -39,25 +50,11 @@ void DustCrateAudioProcessor::updateVoiceParameters()
         if (auto* v = dynamic_cast<SampleVoice*>(synth.getVoice(i)))
         {
             v->setADSR(attack, decay, sustain, release);
+            v->setFilterType(fType);
             v->setFilter(cutoff, res, fType == 1);
             v->setPitchShift(pitch);
             v->setDriftRatio(drift);
         }
-}
-
-void DustCrateAudioProcessor::applyMacroLFO()
-{
-    // Tick LFO and modulate its target parameters
-    const float lfoVal = macroLFO.tick(0); // 0 = value already ticked in processBlock
-    for (const auto& target : macroLFO.getTargets())
-    {
-        if (auto* param = apvts.getParameter(target.paramID))
-        {
-            const float base  = param->getValue();
-            const float mod   = lfoVal * target.depth;
-            param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, base + mod));
-        }
-    }
 }
 
 void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
@@ -66,15 +63,13 @@ void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
-    // Update BPM from DAW playhead
+    // BPM from DAW
     if (auto* ph = getPlayHead())
-    {
         if (auto pos = ph->getPosition())
             if (auto bpm = pos->getBpm())
                 currentBPM.store(*bpm);
-    }
 
-    // MIDI learn CC handling
+    // MIDI learn — consume CC before rendering
     midiLearn.processMidiBuffer(midi, apvts);
 
     {
@@ -89,13 +84,41 @@ void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         synth.renderNextBlock(buffer, midi, 0, buffer.getNumSamples());
     }
 
-    // LFO tick (per block)
-    macroLFO.tick(buffer.getNumSamples());
+    // FIX: Tick LFO exactly once per block (applyMacroLFO() removed — it
+    // called tick(0) AND processBlock called tick(N), double-advancing).
+    // LFO modulation goes directly to CharacterProcessor — never calls
+    // setValueNotifyingHost from the audio thread (illegal in JUCE).
+    const float lfoVal = macroLFO.tick(buffer.getNumSamples()); // -1..+1
 
-    characterProcessor.setDrift    (*apvts.getRawParameterValue("driftAmount"));
-    characterProcessor.setVHS      (*apvts.getRawParameterValue("vhsAmount"));
-    characterProcessor.setCassette (*apvts.getRawParameterValue("cassetteAmount"));
-    characterProcessor.setNoise    (*apvts.getRawParameterValue("noiseLevel"));
+    // Read base param values
+    float noise    = *apvts.getRawParameterValue("noiseLevel");
+    float drift    = *apvts.getRawParameterValue("driftAmount");
+    float vhs      = *apvts.getRawParameterValue("vhsAmount");
+    float cassette = *apvts.getRawParameterValue("cassetteAmount");
+
+    // Apply LFO modulation to the correct target (audio-thread safe: just floats)
+    const int lfoTarget = (int)*apvts.getRawParameterValue("lfoTarget");
+    const float lfoDepth = *apvts.getRawParameterValue("lfoDepth");
+    const float mod = lfoVal * lfoDepth * 0.5f; // scale to ±0.5 max
+    switch (lfoTarget)
+    {
+        case 1: noise    = juce::jlimit(0.0f, 1.0f, noise    + mod); break;
+        case 2: drift    = juce::jlimit(0.0f, 1.0f, drift    + mod); break;
+        case 3: vhs      = juce::jlimit(0.0f, 1.0f, vhs      + mod); break;
+        case 4: cassette = juce::jlimit(0.0f, 1.0f, cassette + mod); break;
+        default: break;
+    }
+
+    // Update LFO rate/shape from params (audio thread, safe setters)
+    macroLFO.setRate  (*apvts.getRawParameterValue("lfoRate"));
+    macroLFO.setShape (static_cast<MacroLFO::Shape>(
+                           (int)*apvts.getRawParameterValue("lfoShape")));
+    macroLFO.setDepth (*apvts.getRawParameterValue("lfoDepth"));
+
+    characterProcessor.setDrift    (drift);
+    characterProcessor.setVHS      (vhs);
+    characterProcessor.setCassette (cassette);
+    characterProcessor.setNoise    (noise);
     characterProcessor.processBlock(buffer);
 
     if (onAudioBlock)
@@ -106,16 +129,23 @@ void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 bool DustCrateAudioProcessor::selectSample(const juce::String& filePath, int rootNote)
 {
     const juce::File file(filePath);
+    if (! file.existsAsFile()) return false; // FIX: early-out before allocating readers
+
     const int nv = synth.getNumVoices();
     std::vector<std::unique_ptr<juce::AudioFormatReader>> readers((size_t)nv);
     bool any = false;
     for (int i = 0; i < nv; ++i)
-    { readers[(size_t)i].reset(formatManager.createReaderFor(file)); if (readers[(size_t)i]) any = true; }
+    {
+        readers[(size_t)i].reset(formatManager.createReaderFor(file));
+        if (readers[(size_t)i]) any = true;
+    }
     if (! any) return false;
+
     const juce::ScopedLock sl(synthLock);
     for (int i = 0; i < nv; ++i)
         if (auto* v = dynamic_cast<SampleVoice*>(synth.getVoice(i)))
-            if (readers[(size_t)i]) v->setReader(readers[(size_t)i].release(), rootNote);
+            if (readers[(size_t)i])
+                v->setReader(readers[(size_t)i].release(), rootNote);
     return true;
 }
 
@@ -137,21 +167,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout
 DustCrateAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("attack",         "Attack",          0.001f,  2.0f,   0.01f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("decay",          "Decay",           0.001f,  2.0f,   0.10f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("sustain",        "Sustain",         0.0f,    1.0f,   0.80f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("release",        "Release",         0.001f,  4.0f,   0.20f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filterCutoff",   "Filter Cutoff",   20.0f,   20000.0f, 8000.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filterRes",      "Filter Resonance",0.1f,   10.0f,  1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("attack",         "Attack",           0.001f,  2.0f,    0.01f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("decay",          "Decay",            0.001f,  2.0f,    0.10f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("sustain",        "Sustain",          0.0f,    1.0f,    0.80f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("release",        "Release",          0.001f,  4.0f,    0.20f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("filterCutoff",   "Filter Cutoff",    20.0f,   20000.0f,8000.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("filterRes",      "Filter Resonance", 0.1f,    10.0f,   1.0f));
     p.push_back(std::make_unique<juce::AudioParameterChoice>("filterType",    "Filter Type",
         juce::StringArray{"Lowpass","Highpass","Bandpass"}, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("pitchSemitones", "Pitch",          -24.0f,  24.0f,  0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("noiseLevel",     "Noise Level",     0.0f,   1.0f,   0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("driftAmount",    "Drift",           0.0f,   1.0f,   0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("vhsAmount",      "VHS",             0.0f,   1.0f,   0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("cassetteAmount", "Cassette",        0.0f,   1.0f,   0.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoRate",        "LFO Rate",        0.01f,  20.0f,  1.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoDepth",       "LFO Depth",       0.0f,   1.0f,   0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("pitchSemitones", "Pitch",           -24.0f,  24.0f,   0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("noiseLevel",     "Noise Level",      0.0f,    1.0f,    0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("driftAmount",    "Drift",            0.0f,    1.0f,    0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("vhsAmount",      "VHS",              0.0f,    1.0f,    0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("cassetteAmount", "Cassette",         0.0f,    1.0f,    0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoRate",        "LFO Rate",         0.01f,   20.0f,   1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoDepth",       "LFO Depth",        0.0f,    1.0f,    0.0f));
     p.push_back(std::make_unique<juce::AudioParameterChoice>("lfoShape",      "LFO Shape",
         juce::StringArray{"Sine","Triangle","Saw","Square"}, 0));
     p.push_back(std::make_unique<juce::AudioParameterChoice>("lfoTarget",     "LFO Target",
@@ -174,13 +204,12 @@ void DustCrateAudioProcessor::setStateInformation(const void* data, int size)
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, size));
     if (xml == nullptr) return;
     auto tree = juce::ValueTree::fromXml(*xml);
-    if (tree.isValid() && tree.hasType(apvts.state.getType()))
-    {
-        const auto extra = tree.getChildWithName("Extra");
-        if (extra.isValid()) midiLearn.loadFromState(extra);
-        tree.removeAllChildren(nullptr); // strip Extra before restoring
-        apvts.replaceState(tree);
-    }
+    if (! tree.isValid() || ! tree.hasType(apvts.state.getType())) return;
+    const auto extra = tree.getChildWithName("Extra");
+    if (extra.isValid()) midiLearn.loadFromState(extra);
+    // FIX: only remove the Extra child we added — not ALL children
+    tree.removeChild(tree.getChildWithName("Extra"), nullptr);
+    apvts.replaceState(tree);
 }
 
 juce::AudioProcessorEditor* DustCrateAudioProcessor::createEditor()

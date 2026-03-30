@@ -8,19 +8,30 @@ SamplePreview::SamplePreview()
 SamplePreview::~SamplePreview()
 {
     stop();
-    if (activeManager)
+    // FIX: only remove callback from the manager we actually registered with
+    if (activeManager != nullptr)
         activeManager->removeAudioCallback(this);
+    activeManager = nullptr;
 }
 
 void SamplePreview::initialise(juce::AudioDeviceManager* ext)
 {
-    if (ext)
+    // FIX: do not double-initialise if called twice
+    if (activeManager != nullptr) return;
+
+    if (ext != nullptr)
     {
         activeManager = ext;
     }
     else
     {
-        ownManager.initialiseWithDefaultDevices(0, 2);
+        const juce::String err = ownManager.initialiseWithDefaultDevices(0, 2);
+        // If no device is available (headless/plugin host), gracefully degrade
+        if (err.isNotEmpty())
+        {
+            // Preview disabled — not fatal
+            return;
+        }
         activeManager = &ownManager;
     }
     activeManager->addAudioCallback(this);
@@ -28,14 +39,18 @@ void SamplePreview::initialise(juce::AudioDeviceManager* ext)
 
 void SamplePreview::previewFile(const juce::File& file, float trimGain)
 {
+    if (activeManager == nullptr) return; // graceful no-op when device unavailable
     stop();
-    trim = trimGain;
+    trim = juce::jlimit(0.0f, 1.0f, trimGain);
     auto* reader = formatManager.createReaderFor(file);
     if (reader == nullptr) return;
 
     const juce::ScopedLock sl(lock);
-    readerSource    = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
+    readerSource     = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
     resamplingSource = std::make_unique<juce::ResamplingAudioSource>(readerSource.get(), false, 2);
+    // FIX: prepareToPlay before setSource so transport is in valid state
+    resamplingSource->prepareToPlay(512, deviceSR);
+    transportSource.prepareToPlay(512, deviceSR);
     transportSource.setSource(resamplingSource.get(), 0, nullptr, reader->sampleRate);
     if (deviceSR > 0.0)
         resamplingSource->setResamplingRatio(reader->sampleRate / deviceSR);
@@ -49,6 +64,8 @@ void SamplePreview::stop()
     const juce::ScopedLock sl(lock);
     transportSource.stop();
     transportSource.setSource(nullptr);
+    // FIX: release resources before resetting sources to avoid UAF
+    transportSource.releaseResources();
     readerSource.reset();
     resamplingSource.reset();
     playing.store(false);
