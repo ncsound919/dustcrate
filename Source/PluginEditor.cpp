@@ -214,8 +214,8 @@ void LFOPanel::paint(juce::Graphics& g)
 void LFOPanel::resized()
 {
     auto area=getLocalBounds().reduced(4);
-    area.removeFromTop(14); // LFO label
-    const int kw=area.getHeight()/2; // knob column width = half height
+    area.removeFromTop(14);
+    const int kw=area.getHeight()/2;
     auto combos=area.removeFromRight(area.getWidth()-kw*2-4);
     auto lc=area.removeFromLeft(kw); auto dc=area;
     rateLabel.setBounds(lc.removeFromBottom(12)); rateSlider.setBounds(lc.reduced(2));
@@ -235,18 +235,24 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     setSize(720, 600);
     setResizable(true,true);
 
-    // Preset bar
     addAndMakeVisible(presetBar);
     presetBar.onPresetLoaded = [this] { refreshBrowsers(); };
 
-    // Waveform
     addAndMakeVisible(waveform);
     waveform.waveColour       = DustCrateLookAndFeel::amber();
     waveform.backgroundColour = juce::Colour(0xff161819);
     waveform.gridColour       = juce::Colour(0xff252729);
-    audioProcessor.onAudioBlock = [this](const float* d, int n) { waveform.pushSamples(d,n); };
 
-    // Browser panels
+    // FIX: use SafePointer on waveform so the lambda is safe if processor
+    // outlives the editor (host can theoretically call processBlock after
+    // the editor window is closed).
+    juce::Component::SafePointer<WaveformDisplay> safeWave(&waveform);
+    audioProcessor.onAudioBlock = [safeWave](const float* d, int n)
+    {
+        if (auto* w = safeWave.getComponent())
+            w->pushSamples(d, n);
+    };
+
     addAndMakeVisible(soundsPanel); addAndMakeVisible(noisePanel);
     soundsPanel.addChildAndMakeVisible(soundTagBar);
     soundsPanel.addChildAndMakeVisible(searchBox);
@@ -270,7 +276,6 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     int pid=2;
     for (auto& pk:lib.getPacks()) packFilter.addItem(pk,pid++);
 
-    // Single-click preview
     samplePreview.initialise();
     setupKnob(previewTrimSlider, previewTrimLabel, "PRV", false);
     previewTrimSlider.setRange(0.0, 1.0); previewTrimSlider.setValue(0.75);
@@ -279,20 +284,29 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
 
     mainList.onSampleSelected = [this](const SampleEntry& e)
     {
-        const float trim = (float)previewTrimSlider.getValue();
-        samplePreview.previewFile(audioProcessor.getSampleLibrary().resolveFilePath(e), trim);
+        const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        if (f.existsAsFile()) // FIX: guard resolve before previewing
+            samplePreview.previewFile(f, (float)previewTrimSlider.getValue());
     };
     mainList.onSampleTriggered = [this](const SampleEntry& e)
-    { audioProcessor.triggerSample(audioProcessor.getSampleLibrary().resolveFilePath(e).getFullPathName(), e.rootNote, 1.0f); };
+    {
+        const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        if (f.existsAsFile())
+            audioProcessor.triggerSample(f.getFullPathName(), e.rootNote, 1.0f);
+    };
     noiseList.onSampleSelected = [this](const SampleEntry& e)
     {
-        const float trim = (float)previewTrimSlider.getValue();
-        samplePreview.previewFile(audioProcessor.getSampleLibrary().resolveFilePath(e), trim);
+        const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        if (f.existsAsFile())
+            samplePreview.previewFile(f, (float)previewTrimSlider.getValue());
     };
     noiseList.onSampleTriggered = [this](const SampleEntry& e)
-    { audioProcessor.triggerSample(audioProcessor.getSampleLibrary().resolveFilePath(e).getFullPathName(), e.rootNote, 0.75f); };
+    {
+        const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        if (f.existsAsFile())
+            audioProcessor.triggerSample(f.getFullPathName(), e.rootNote, 0.75f);
+    };
 
-    // Pack import wizard callback
     packWizard.onPackImported = [this](const juce::String& packName)
     {
         styleCombo(packFilter);
@@ -301,14 +315,12 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
         refreshNoiseTags();
     };
 
-    // Envelope
     addAndMakeVisible(envelopePanel);
     setupKnob(attackSlider,attackLabel,"ATK");    envelopePanel.addChildAndMakeVisible(attackSlider);  envelopePanel.addChildAndMakeVisible(attackLabel);
     setupKnob(decaySlider,decayLabel,"DCY");      envelopePanel.addChildAndMakeVisible(decaySlider);   envelopePanel.addChildAndMakeVisible(decayLabel);
     setupKnob(sustainSlider,sustainLabel,"SUS");  envelopePanel.addChildAndMakeVisible(sustainSlider); envelopePanel.addChildAndMakeVisible(sustainLabel);
     setupKnob(releaseSlider,releaseLabel,"REL");  envelopePanel.addChildAndMakeVisible(releaseSlider); envelopePanel.addChildAndMakeVisible(releaseLabel);
 
-    // Filter + Pitch
     addAndMakeVisible(filterPanel);
     setupKnob(filterCutoffSlider,cutoffLabel,"CUTOFF"); filterPanel.addChildAndMakeVisible(filterCutoffSlider); filterPanel.addChildAndMakeVisible(cutoffLabel);
     setupKnob(filterResSlider,resLabel,"RES");           filterPanel.addChildAndMakeVisible(filterResSlider);    filterPanel.addChildAndMakeVisible(resLabel);
@@ -318,7 +330,6 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     filterTypeCombo.setSelectedId(1);
     filterPanel.addChildAndMakeVisible(filterTypeCombo);
 
-    // Character
     addAndMakeVisible(characterPanel);
     setupKnob(noiseLevelSlider,noiseLabelKnob,"NOISE",true); characterPanel.addChildAndMakeVisible(noiseLevelSlider); characterPanel.addChildAndMakeVisible(noiseLabelKnob);
     setupKnob(driftSlider,driftLabel,"DRIFT",true);          characterPanel.addChildAndMakeVisible(driftSlider);      characterPanel.addChildAndMakeVisible(driftLabel);
@@ -326,7 +337,6 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     setupKnob(cassetteSlider,cassetteLabel,"CASS",true);     characterPanel.addChildAndMakeVisible(cassetteSlider);   characterPanel.addChildAndMakeVisible(cassetteLabel);
     characterPanel.addChildAndMakeVisible(lfoPanel);
 
-    // APVTS attachments
     auto& ap = audioProcessor.apvts;
     attackAttach      = std::make_unique<SliderAttachment>(ap,"attack",attackSlider);
     decayAttach       = std::make_unique<SliderAttachment>(ap,"decay",decaySlider);
@@ -345,28 +355,36 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     lfoShapeAttach    = std::make_unique<ComboAttachment> (ap,"lfoShape",lfoPanel.shapeCombo);
     lfoTargetAttach   = std::make_unique<ComboAttachment> (ap,"lfoTarget",lfoPanel.targetCombo);
 
-    // MIDI learn: register all sliders
     auto& ml = audioProcessor.midiLearn;
-    ml.registerSlider(&attackSlider,"attack");           ml.registerSlider(&decaySlider,"decay");
-    ml.registerSlider(&sustainSlider,"sustain");         ml.registerSlider(&releaseSlider,"release");
+    ml.registerSlider(&attackSlider,"attack");             ml.registerSlider(&decaySlider,"decay");
+    ml.registerSlider(&sustainSlider,"sustain");           ml.registerSlider(&releaseSlider,"release");
     ml.registerSlider(&filterCutoffSlider,"filterCutoff"); ml.registerSlider(&filterResSlider,"filterRes");
-    ml.registerSlider(&pitchSlider,"pitchSemitones");    ml.registerSlider(&noiseLevelSlider,"noiseLevel");
-    ml.registerSlider(&driftSlider,"driftAmount");       ml.registerSlider(&vhsSlider,"vhsAmount");
-    ml.registerSlider(&cassetteSlider,"cassetteAmount"); ml.registerSlider(&lfoPanel.rateSlider,"lfoRate");
+    ml.registerSlider(&pitchSlider,"pitchSemitones");      ml.registerSlider(&noiseLevelSlider,"noiseLevel");
+    ml.registerSlider(&driftSlider,"driftAmount");         ml.registerSlider(&vhsSlider,"vhsAmount");
+    ml.registerSlider(&cassetteSlider,"cassetteAmount");   ml.registerSlider(&lfoPanel.rateSlider,"lfoRate");
     ml.registerSlider(&lfoPanel.depthSlider,"lfoDepth");
-
-    // Right-click context menu for MIDI learn
-    for (auto* s : {&attackSlider,&decaySlider,&sustainSlider,&releaseSlider,
-                    &filterCutoffSlider,&filterResSlider,&pitchSlider,
-                    &noiseLevelSlider,&driftSlider,&vhsSlider,&cassetteSlider})
-        s->setInterceptsMouseClicks(true,true);
 
     refreshBrowsers();
 }
 
 DustCrateAudioProcessorEditor::~DustCrateAudioProcessorEditor()
 {
+    // FIX: null the audio callback FIRST, before any member destruction,
+    // so the audio thread can’t fire into a half-destroyed editor.
     audioProcessor.onAudioBlock = nullptr;
+
+    // FIX: unregister all sliders from MidiLearnManager before they are destroyed,
+    // preventing the manager (owned by the processor, outlives the editor) from
+    // holding dangling Slider* pointers.
+    auto& ml = audioProcessor.midiLearn;
+    ml.unregisterSlider(&attackSlider);       ml.unregisterSlider(&decaySlider);
+    ml.unregisterSlider(&sustainSlider);      ml.unregisterSlider(&releaseSlider);
+    ml.unregisterSlider(&filterCutoffSlider); ml.unregisterSlider(&filterResSlider);
+    ml.unregisterSlider(&pitchSlider);        ml.unregisterSlider(&noiseLevelSlider);
+    ml.unregisterSlider(&driftSlider);        ml.unregisterSlider(&vhsSlider);
+    ml.unregisterSlider(&cassetteSlider);     ml.unregisterSlider(&lfoPanel.rateSlider);
+    ml.unregisterSlider(&lfoPanel.depthSlider);
+
     setLookAndFeel(nullptr);
 }
 
@@ -376,16 +394,23 @@ void DustCrateAudioProcessorEditor::setupKnob(juce::Slider& s, juce::Label& l,
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
     s.getProperties().set("slateAccent",slate);
-    s.onValueChange = [this, &s] {
-        // Show right-click MIDI learn on any slider
-        if (juce::ModifierKeys::getCurrentModifiers().isRightButtonDown())
-            audioProcessor.midiLearn.showContextMenu(&s);
-    };
+    // FIX: MIDI learn context menu must be on mouseDown, not onValueChange.
+    // onValueChange fires on every automated parameter move, not right-click.
+    s.addMouseListener(this, false);
     l.setText(text,juce::dontSendNotification);
     l.setJustificationType(juce::Justification::centred);
     l.setFont(juce::Font("Helvetica Neue",9,juce::Font::plain));
     l.setColour(juce::Label::textColourId, slate?DustCrateLookAndFeel::slate():DustCrateLookAndFeel::textSec());
     l.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+}
+
+void DustCrateAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
+{
+    // FIX: right-click MIDI learn — fires on mouseDown so it’s not confused
+    // with parameter changes. Only triggers on registered sliders.
+    if (e.mods.isRightButtonDown())
+        if (auto* s = dynamic_cast<juce::Slider*>(e.eventComponent))
+            audioProcessor.midiLearn.showContextMenu(s);
 }
 
 void DustCrateAudioProcessorEditor::styleCombo(juce::ComboBox& c)
@@ -405,7 +430,7 @@ void DustCrateAudioProcessorEditor::refreshNoiseTags()
 
 void DustCrateAudioProcessorEditor::refreshBrowsers()
 {
-    auto& lib    = audioProcessor.getSampleLibrary();
+    auto& lib     = audioProcessor.getSampleLibrary();
     const juce::String cat    = soundTagBar.selectedCategory.equalsIgnoreCase("All") ? juce::String() : soundTagBar.selectedCategory;
     const juce::String nSub   = noiseTagBar.selectedCategory.equalsIgnoreCase("All") ? juce::String() : noiseTagBar.selectedCategory;
     const juce::String pack   = packFilter.getText() == "All Packs" ? juce::String() : packFilter.getText();
@@ -414,7 +439,7 @@ void DustCrateAudioProcessorEditor::refreshBrowsers()
     juce::Array<SampleEntry> me, ne;
     for (const auto& e : lib.getAllSamples())
     {
-        if (!pack.isEmpty() && !e.pack.equalsIgnoreCase(pack)) continue;
+        if (!pack.isEmpty()   && !e.pack.equalsIgnoreCase(pack))       continue;
         if (!search.isEmpty() && !e.name.toLowerCase().contains(search)) continue;
         if (e.category.equalsIgnoreCase("noise"))
         {
@@ -453,13 +478,9 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
 void DustCrateAudioProcessorEditor::resized()
 {
     auto area=getLocalBounds();
-    area.removeFromTop(44); // masthead
-
-    // Preset bar under masthead
+    area.removeFromTop(44);
     presetBar.setBounds(area.removeFromTop(32));
     area.reduce(8,8);
-
-    // Waveform
     waveform.setBounds(area.removeFromTop(48));
     area.removeFromTop(6);
 
@@ -467,7 +488,6 @@ void DustCrateAudioProcessorEditor::resized()
     auto browserRow = area.removeFromTop(area.getHeight()-bottomH-divH);
     area.removeFromTop(divH);
 
-    // Browsers 62/38
     const int sw=int(browserRow.getWidth()*.62f);
     auto sb=browserRow.removeFromLeft(sw).reduced(2);
     auto nb=browserRow.reduced(2);
@@ -492,7 +512,6 @@ void DustCrateAudioProcessorEditor::resized()
         noiseList.setBounds(in);
     }
 
-    // Control strip
     auto controls=area;
     const int gap=6;
     const int ew=int(controls.getWidth()*.28f);
@@ -522,11 +541,9 @@ void DustCrateAudioProcessorEditor::resized()
 
     {
         auto in=cb.reduced(4); in.removeFromTop(SectionPanel::kHeaderH+2);
-        // LFO panel at bottom of character
         const int lfoH=72;
         lfoPanel.setBounds(in.removeFromBottom(lfoH));
         in.removeFromBottom(4);
-        // 4 character knobs above LFO
         const int slotW=in.getWidth()/4;
         for (auto[s,l]:std::initializer_list<std::pair<juce::Slider*,juce::Label*>>{
             {&noiseLevelSlider,&noiseLabelKnob},{&driftSlider,&driftLabel},

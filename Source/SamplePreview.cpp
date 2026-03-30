@@ -8,16 +8,16 @@ SamplePreview::SamplePreview()
 SamplePreview::~SamplePreview()
 {
     stop();
-    // FIX: only remove callback from the manager we actually registered with
     if (activeManager != nullptr)
+    {
         activeManager->removeAudioCallback(this);
-    activeManager = nullptr;
+        activeManager = nullptr;
+    }
 }
 
 void SamplePreview::initialise(juce::AudioDeviceManager* ext)
 {
-    // FIX: do not double-initialise if called twice
-    if (activeManager != nullptr) return;
+    if (activeManager != nullptr) return; // guard double-init
 
     if (ext != nullptr)
     {
@@ -26,12 +26,7 @@ void SamplePreview::initialise(juce::AudioDeviceManager* ext)
     else
     {
         const juce::String err = ownManager.initialiseWithDefaultDevices(0, 2);
-        // If no device is available (headless/plugin host), gracefully degrade
-        if (err.isNotEmpty())
-        {
-            // Preview disabled — not fatal
-            return;
-        }
+        if (err.isNotEmpty()) return; // graceful: preview disabled, not fatal
         activeManager = &ownManager;
     }
     activeManager->addAudioCallback(this);
@@ -39,21 +34,24 @@ void SamplePreview::initialise(juce::AudioDeviceManager* ext)
 
 void SamplePreview::previewFile(const juce::File& file, float trimGain)
 {
-    if (activeManager == nullptr) return; // graceful no-op when device unavailable
+    if (activeManager == nullptr) return;
+    if (! file.existsAsFile())    return; // FIX: guard missing file before allocation
     stop();
     trim = juce::jlimit(0.0f, 1.0f, trimGain);
+
     auto* reader = formatManager.createReaderFor(file);
     if (reader == nullptr) return;
+
+    // FIX: use a safe default SR if audioDeviceAboutToStart hasn’t fired yet
+    const double effectiveSR = (deviceSR > 0.0) ? deviceSR : 44100.0;
 
     const juce::ScopedLock sl(lock);
     readerSource     = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
     resamplingSource = std::make_unique<juce::ResamplingAudioSource>(readerSource.get(), false, 2);
-    // FIX: prepareToPlay before setSource so transport is in valid state
-    resamplingSource->prepareToPlay(512, deviceSR);
-    transportSource.prepareToPlay(512, deviceSR);
+    resamplingSource->prepareToPlay(512, effectiveSR);
+    transportSource.prepareToPlay(512, effectiveSR);
     transportSource.setSource(resamplingSource.get(), 0, nullptr, reader->sampleRate);
-    if (deviceSR > 0.0)
-        resamplingSource->setResamplingRatio(reader->sampleRate / deviceSR);
+    resamplingSource->setResamplingRatio(reader->sampleRate / effectiveSR);
     transportSource.setPosition(0.0);
     transportSource.start();
     playing.store(true);
@@ -64,7 +62,6 @@ void SamplePreview::stop()
     const juce::ScopedLock sl(lock);
     transportSource.stop();
     transportSource.setSource(nullptr);
-    // FIX: release resources before resetting sources to avoid UAF
     transportSource.releaseResources();
     readerSource.reset();
     resamplingSource.reset();
@@ -73,13 +70,16 @@ void SamplePreview::stop()
 
 void SamplePreview::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
-    deviceSR = device ? device->getCurrentSampleRate() : 44100.0;
-    transportSource.prepareToPlay(device ? device->getCurrentBufferSizeSamples() : 512, deviceSR);
+    deviceSR = (device != nullptr && device->getCurrentSampleRate() > 0.0)
+             ? device->getCurrentSampleRate() : 44100.0;
+    const int bufSize = (device != nullptr) ? device->getCurrentBufferSizeSamples() : 512;
+    transportSource.prepareToPlay(bufSize, deviceSR);
 }
 
 void SamplePreview::audioDeviceStopped()
 {
     transportSource.releaseResources();
+    deviceSR = 44100.0; // FIX: reset to safe default rather than leaving as last value
 }
 
 void SamplePreview::audioDeviceIOCallbackWithContext(
@@ -88,6 +88,7 @@ void SamplePreview::audioDeviceIOCallbackWithContext(
     int numSamples,
     const juce::AudioIODeviceCallbackContext&)
 {
+    if (out == nullptr || numOut <= 0 || numSamples <= 0) return; // FIX: null-out guard
     juce::AudioBuffer<float> buf(out, numOut, numSamples);
     buf.clear();
     if (! playing.load()) return;
