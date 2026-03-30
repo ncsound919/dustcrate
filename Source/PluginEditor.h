@@ -121,6 +121,7 @@ public:
 private:
     DustCrateAudioProcessor& audioProcessor;
     DustCrateLookAndFeel     laf;
+    juce::Typeface::Ptr      graffitiTypeface;
 
     // Header
     PresetBrowserBar presetBar { audioProcessor.apvts };

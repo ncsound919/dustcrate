@@ -52,6 +52,7 @@ target_link_libraries(DustCrate
 juce_add_binary_data(DustCrateAssets
     SOURCES
         assets/samples/.gitkeep
+        assets/fonts/SedgwickAveDisplay-Regular.ttf
         packs/factory_pack.json
 )
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)
