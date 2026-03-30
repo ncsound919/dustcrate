@@ -888,3 +888,247 @@ void DustCrateAudioProcessorEditor::resized()
     menuSettingsBtn.setBounds(getWidth()-88,  10, 80, 24);
     menuFileBtn    .setBounds(getWidth()-170, 10, 76, 24);
 }
+
+
+//==============================================================================
+// Tab switcher — show/hide the four bottom-panel modes
+void DustCrateAudioProcessorEditor::switchTab (int index)
+{
+    activeTab = index;
+
+    // Browser tab
+    soundsPanel.setVisible  (index == 0);
+    noisePanel.setVisible   (index == 0);
+    soundTagBar.setVisible  (index == 0);
+    noiseTagBar.setVisible  (index == 0);
+    searchBox.setVisible    (index == 0);
+    packFilter.setVisible   (index == 0);
+
+    // Kit tab
+    mpcKitSection.setVisible (index == 1);
+    mpcKitPanel.setVisible   (index == 1);
+    mpcExportBtn.setVisible  (index == 1);
+    mpcClearBtn.setVisible   (index == 1);
+    kitNameEditor.setVisible (index == 1);
+    kitNameLabel.setVisible  (index == 1);
+
+    // Slicer tab
+    slicerSection.setVisible  (index == 2);
+    slicerPanel.setVisible    (index == 2);
+    sliceAutoBtn.setVisible   (index == 2);
+    sliceEvenBtn.setVisible   (index == 2);
+    sliceClearBtn.setVisible  (index == 2);
+    sliceExportBtn.setVisible (index == 2);
+    sliceEvenCombo.setVisible (index == 2);
+    sliceCountLabel.setVisible(index == 2);
+
+    // MIDI Out tab
+    midiOutSection.setVisible  (index == 3);
+    midiOutputPanel.setVisible (index == 3);
+
+    // Highlight active tab button
+    tabBrowserBtn.setColour (juce::TextButton::buttonColourId,
+        index == 0 ? DustCrateLookAndFeel::amber() : DustCrateLookAndFeel::panel());
+    tabKitBtn.setColour (juce::TextButton::buttonColourId,
+        index == 1 ? DustCrateLookAndFeel::amber() : DustCrateLookAndFeel::panel());
+    tabSlicerBtn.setColour (juce::TextButton::buttonColourId,
+        index == 2 ? DustCrateLookAndFeel::amber() : DustCrateLookAndFeel::panel());
+    tabMidiBtn.setColour (juce::TextButton::buttonColourId,
+        index == 3 ? DustCrateLookAndFeel::amber() : DustCrateLookAndFeel::panel());
+
+    resized();
+}
+
+//==============================================================================
+void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
+{
+    // Drag a sample from the browser onto a pad
+    mainList.onSampleSelected = [this](const SampleLibrary::Entry& e)
+    {
+        currentFilePath = e.filePath;
+        currentRootNote = e.rootNote;
+        audioProcessor.selectSample (currentFilePath, currentRootNote);
+        slicerPanel.loadFile (juce::File (currentFilePath));
+        waveform.loadFile    (juce::File (currentFilePath));
+    };
+
+    // Audition pad on double-click
+    mpcKitPanel.onPadAudition = [this](int /*padIndex*/, const MpcPadSlot& pad)
+    {
+        audioProcessor.triggerSample (pad.filePath, pad.rootNote, 1.0f);
+    };
+
+    // Show pad info in status bar when selected
+    mpcKitPanel.onPadSelected = [this](int padIndex)
+    {
+        auto& pad = mpcKitPanel.getPad (padIndex);
+        if (pad.occupied)
+            currentFilePath = pad.filePath;
+    };
+
+    // When a sample is assigned, also load it into the slicer
+    mpcKitPanel.onPadAssigned = [this](int /*padIndex*/, const MpcPadSlot& pad)
+    {
+        slicerPanel.loadFile (juce::File (pad.filePath));
+    };
+
+    // Export button
+    mpcExportBtn.onClick = [this]
+    {
+        launchMpcExport();
+    };
+
+    mpcClearBtn.onClick = [this]
+    {
+        mpcKitPanel.clearAll();
+    };
+
+    kitNameEditor.setMultiLine (false);
+    kitNameEditor.setText      ("MyKit");
+    kitNameEditor.setInputRestrictions (32, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
+}
+
+void DustCrateAudioProcessorEditor::launchMpcExport()
+{
+    juce::FileChooser chooser ("Choose export folder (microSD root or staging folder)",
+                               juce::File::getSpecialLocation (juce::File::userDesktopDirectory));
+    if (! chooser.browseForDirectory()) return;
+
+    juce::File dest = chooser.getResult();
+    juce::String kitName = kitNameEditor.getText().trim();
+    if (kitName.isEmpty()) kitName = "DustCrateKit";
+
+    mpcExportEngine.onProgress = [this](float p)
+    {
+        juce::MessageManager::callAsync ([p]() {
+            // Progress could update a progress bar here
+            juce::ignoreUnused (p);
+        });
+    };
+
+    auto result = mpcExportEngine.exportKit (mpcKitPanel, kitName, dest);
+
+    juce::AlertWindow::showMessageBoxAsync (
+        result.success ? juce::MessageBoxIconType::InfoIcon
+                       : juce::MessageBoxIconType::WarningIcon,
+        result.success ? "Export Complete" : "Export Failed",
+        result.message);
+}
+
+//==============================================================================
+void DustCrateAudioProcessorEditor::setupSlicerCallbacks()
+{
+    sliceAutoBtn.onClick = [this]
+    {
+        slicerPanel.detectTransients (0.15f);
+        sliceCountLabel.setText (juce::String (slicerPanel.getMarkers().size()) + " slices",
+                                 juce::dontSendNotification);
+    };
+
+    sliceEvenBtn.onClick = [this]
+    {
+        int n = sliceEvenCombo.getSelectedId();
+        if (n > 0) slicerPanel.sliceEven (n);
+        sliceCountLabel.setText (juce::String (slicerPanel.getMarkers().size()) + " slices",
+                                 juce::dontSendNotification);
+    };
+
+    sliceClearBtn.onClick = [this]
+    {
+        slicerPanel.clearMarkers();
+        sliceCountLabel.setText ("0 slices", juce::dontSendNotification);
+    };
+
+    sliceExportBtn.onClick = [this]
+    {
+        if (currentFilePath.isEmpty()) return;
+        juce::FileChooser chooser ("Choose export folder for slices",
+                                   juce::File::getSpecialLocation (juce::File::userDesktopDirectory));
+        if (! chooser.browseForDirectory()) return;
+
+        juce::File dest  = chooser.getResult();
+        juce::String stem = juce::File (currentFilePath).getFileNameWithoutExtension();
+        int written = slicerPanel.exportSlices (dest, stem);
+
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon,
+            "Slices Exported",
+            juce::String (written) + " WAV slices + MIDI chop map written to:\n"
+            + dest.getFullPathName());
+    };
+
+    slicerPanel.onMarkerClicked = [this](int samplePos)
+    {
+        // Play from the marker position by previewing
+        juce::ignoreUnused (samplePos);
+    };
+
+    // Even-slice count options: 2, 4, 8, 16, 32
+    sliceEvenCombo.addItem ("2",  2);
+    sliceEvenCombo.addItem ("4",  4);
+    sliceEvenCombo.addItem ("8",  8);
+    sliceEvenCombo.addItem ("16", 16);
+    sliceEvenCombo.addItem ("32", 32);
+    sliceEvenCombo.setSelectedId (16, juce::dontSendNotification);
+}
+
+//==============================================================================
+// Constructor additions for MPC panels
+// Called at end of DustCrateAudioProcessorEditor constructor
+void DustCrateAudioProcessorEditor::initMpcPanels()
+{
+    // Tab strip buttons
+    addAndMakeVisible (tabBrowserBtn);
+    addAndMakeVisible (tabKitBtn);
+    addAndMakeVisible (tabSlicerBtn);
+    addAndMakeVisible (tabMidiBtn);
+
+    tabBrowserBtn.onClick = [this] { switchTab (0); };
+    tabKitBtn.onClick     = [this] { switchTab (1); };
+    tabSlicerBtn.onClick  = [this] { switchTab (2); };
+    tabMidiBtn.onClick    = [this] { switchTab (3); };
+
+    // MPC Kit panel
+    addAndMakeVisible (mpcKitSection);
+    addAndMakeVisible (mpcKitPanel);
+    addAndMakeVisible (mpcExportBtn);
+    addAndMakeVisible (mpcClearBtn);
+    addAndMakeVisible (kitNameEditor);
+    addAndMakeVisible (kitNameLabel);
+    addAndMakeVisible (menuMpcBtn);
+
+    menuMpcBtn.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addItem (1, "Kit Builder");
+        m.addItem (2, "Slicer / Chop");
+        m.addItem (3, "MIDI Out -> MPC");
+        m.addSeparator();
+        m.addItem (4, "Export Kit to MPC...");
+        m.showMenuAsync ({}, [this](int r)
+        {
+            if (r >= 1 && r <= 3) switchTab (r);
+            if (r == 4) launchMpcExport();
+        });
+    };
+
+    // Slicer panel
+    addAndMakeVisible (slicerSection);
+    addAndMakeVisible (slicerPanel);
+    addAndMakeVisible (sliceAutoBtn);
+    addAndMakeVisible (sliceEvenBtn);
+    addAndMakeVisible (sliceClearBtn);
+    addAndMakeVisible (sliceExportBtn);
+    addAndMakeVisible (sliceEvenCombo);
+    addAndMakeVisible (sliceCountLabel);
+
+    // MIDI Out panel
+    addAndMakeVisible (midiOutSection);
+    addAndMakeVisible (midiOutputPanel);
+
+    setupMpcKitCallbacks();
+    setupSlicerCallbacks();
+
+    // Start on browser tab
+    switchTab (0);
+}
