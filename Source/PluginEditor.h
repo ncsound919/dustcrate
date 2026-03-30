@@ -5,6 +5,10 @@
 #include "PresetBrowserBar.h"
 #include "SamplePreview.h"
 #include "PackImportWizard.h"
+#include "MpcKitPanel.h"
+#include "MpcExportEngine.h"
+#include "SlicerPanel.h"
+#include "MidiOutputPanel.h"
 
 //==============================================================================
 class DustCrateLookAndFeel : public juce::LookAndFeel_V4
@@ -17,9 +21,8 @@ public:
     void drawLabel(juce::Graphics&,juce::Label&) override;
     void drawPopupMenuBackground(juce::Graphics&,int,int) override;
     void drawPopupMenuItem(juce::Graphics&,const juce::Rectangle<int>&,
-                           bool,bool,bool,bool,bool,const juce::String&,
-                           const juce::String&,const juce::Drawable*,
-                           const juce::Colour*) override;
+        bool,bool,bool,bool,bool,const juce::String&,
+        const juce::String&,const juce::Drawable*,const juce::Colour*) override;
     void drawButtonBackground(juce::Graphics&,juce::Button&,const juce::Colour&,bool,bool) override;
     juce::Font getTextButtonFont(juce::TextButton&,int) override;
 
@@ -60,20 +63,20 @@ class SampleBrowserList : public juce::Component, public juce::ListBoxModel
 {
 public:
     SampleBrowserList(DustCrateAudioProcessor&, DustCrateLookAndFeel&);
-    void setEntries(const juce::Array<SampleEntry>&);
-    int getNumRows() override;
+    void setEntries(const juce::Array<SampleLibrary::Entry>&);
+    int  getNumRows() override;
     void paintListBoxItem(int,juce::Graphics&,int,int,bool) override;
     void listBoxItemClicked(int,const juce::MouseEvent&) override;
     void listBoxItemDoubleClicked(int,const juce::MouseEvent&) override;
     void resized() override;
-    std::function<void(const SampleEntry&)> onSampleSelected;
-    std::function<void(const SampleEntry&)> onSampleTriggered;
+    std::function<void(const SampleLibrary::Entry&)> onSampleSelected;
+    std::function<void(const SampleLibrary::Entry&)> onSampleTriggered;
     int selectedRow { -1 };
 private:
     DustCrateAudioProcessor& processor;
     DustCrateLookAndFeel& laf;
     juce::ListBox listBox { "browser", this };
-    juce::Array<SampleEntry> entries;
+    juce::Array<SampleLibrary::Entry> entries;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SampleBrowserList)
 };
 
@@ -98,16 +101,17 @@ public:
     LFOPanel();
     void resized() override;
     void paint(juce::Graphics&) override;
-    juce::Slider    rateSlider, depthSlider;
-    juce::ComboBox  shapeCombo, targetCombo;
-    juce::Label     rateLabel,  depthLabel;
+    juce::Slider rateSlider, depthSlider;
+    juce::ComboBox shapeCombo, targetCombo;
+    juce::Label rateLabel, depthLabel;
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LFOPanel)
 };
 
 //==============================================================================
-class DustCrateAudioProcessorEditor  : public juce::AudioProcessorEditor,
-                                       public juce::FileDragAndDropTarget
+class DustCrateAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                      public juce::FileDragAndDropTarget,
+                                      public juce::DragAndDropContainer
 {
 public:
     explicit DustCrateAudioProcessorEditor(DustCrateAudioProcessor&);
@@ -115,23 +119,23 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
-    bool isInterestedInFileDrag(const juce::StringArray& f) override { return packWizard.isInterestedInFileDrag(f); }
-    void filesDropped(const juce::StringArray& f, int x, int y) override { packWizard.filesDropped(f, x, y); }
+    bool isInterestedInFileDrag(const juce::StringArray& f) override
+        { return packWizard.isInterestedInFileDrag(f); }
+    void filesDropped(const juce::StringArray& f, int x, int y) override
+        { packWizard.filesDropped(f, x, y); }
 
-    // Exposed for KeyboardListener
     DustCrateAudioProcessor& audioProcessor;
     juce::String currentFilePath;
-    int          currentRootNote { 60 };
+    int currentRootNote { 60 };
 
 private:
     DustCrateLookAndFeel laf;
-
-    // Typeface
     juce::Typeface::Ptr velumStrokeTypeface;
 
-    // ---- Top menu buttons ----
+    // ---- Top menu ----
     juce::TextButton menuFileBtn     { "FILE" };
     juce::TextButton menuSettingsBtn { "SETTINGS" };
+    juce::TextButton menuMpcBtn      { "MPC" };   // NEW: MPC tools menu
 
     // ---- Preset bar ----
     PresetBrowserBar presetBar { audioProcessor.apvts };
@@ -151,8 +155,8 @@ private:
 
     // ---- Sample preview ----
     SamplePreview samplePreview;
-    juce::Slider  previewTrimSlider;
-    juce::Label   previewTrimLabel;
+    juce::Slider previewTrimSlider;
+    juce::Label  previewTrimLabel;
 
     // ---- Pack import ----
     PackImportWizard packWizard { audioProcessor.getSampleLibrary() };
@@ -160,63 +164,97 @@ private:
     // ---- Envelope ----
     SectionPanel envelopePanel { "ENVELOPE" };
     juce::Slider attackSlider, decaySlider, sustainSlider, releaseSlider;
-    juce::Label  attackLabel,  decayLabel,  sustainLabel,  releaseLabel;
+    juce::Label  attackLabel, decayLabel, sustainLabel, releaseLabel;
 
     // ---- Filter / Pitch ----
     SectionPanel filterPanel { "FILTER / PITCH" };
     juce::Slider filterCutoffSlider, filterResSlider, pitchSlider;
     juce::Label  cutoffLabel, resLabel, pitchLabel;
-    // LP / HP / BP toggle buttons (replace hidden combo)
     juce::TextButton filterLpBtn { "LP" };
     juce::TextButton filterHpBtn { "HP" };
     juce::TextButton filterBpBtn { "BP" };
-    juce::ComboBox   filterTypeCombo;  // kept for APVTS attachment
+    juce::ComboBox filterTypeCombo;
 
     // ---- Character ----
     SectionPanel characterPanel { "CHARACTER", true };
     juce::Slider noiseLevelSlider, driftSlider, vhsSlider, cassetteSlider;
-    juce::Label  noiseLabelKnob,   driftLabel,  vhsLabel,  cassetteLabel;
-    LFOPanel     lfoPanel;
+    juce::Label  noiseLabelKnob, driftLabel, vhsLabel, cassetteLabel;
+    LFOPanel lfoPanel;
 
     // ---- On-screen keyboard ----
     juce::MidiKeyboardState     keyboardState;
     juce::MidiKeyboardComponent keyboard { keyboardState,
         juce::MidiKeyboardComponent::horizontalKeyboard };
-
-    struct KeyboardListener : public juce::MidiKeyboardStateListener
-    {
+    struct KeyboardListener : public juce::MidiKeyboardStateListener {
         DustCrateAudioProcessorEditor& ed;
         explicit KeyboardListener(DustCrateAudioProcessorEditor& e) : ed(e) {}
-        void handleNoteOn(juce::MidiKeyboardState*, int, int note, float vel) override
-        {
+        void handleNoteOn (juce::MidiKeyboardState*, int, int note, float vel) override {
             if (!ed.currentFilePath.isEmpty())
                 ed.audioProcessor.triggerSample(ed.currentFilePath, note, vel);
+            ed.midiOutputPanel.sendNoteOn(note, vel);
         }
-        void handleNoteOff(juce::MidiKeyboardState*, int, int /*note*/, float) override
-        {
+        void handleNoteOff(juce::MidiKeyboardState*, int, int note, float) override {
             ed.audioProcessor.stopAllVoices();
+            ed.midiOutputPanel.sendNoteOff(note);
         }
     };
     std::unique_ptr<KeyboardListener> keyboardListener;
+
+    // ============================================================
+    // NEW MPC COMPANION PANELS
+    // ============================================================
+
+    // ---- MPC Kit Builder (16-pad grid) ----
+    SectionPanel   mpcKitSection  { "MPC KIT BUILDER" };
+    MpcKitPanel    mpcKitPanel;
+    juce::TextButton mpcExportBtn { "EXPORT TO MPC" };
+    juce::TextButton mpcClearBtn  { "CLEAR KIT" };
+    juce::TextEditor kitNameEditor;
+    juce::Label      kitNameLabel { {}, "KIT NAME" };
+    MpcExportEngine  mpcExportEngine;
+
+    // ---- Slicer ----
+    SectionPanel   slicerSection  { "SLICER / CHOP" };
+    SlicerPanel    slicerPanel;
+    juce::TextButton sliceAutoBtn  { "AUTO" };
+    juce::TextButton sliceEvenBtn  { "EVEN" };
+    juce::TextButton sliceClearBtn { "CLEAR" };
+    juce::TextButton sliceExportBtn{ "EXPORT SLICES" };
+    juce::ComboBox   sliceEvenCombo;  // number of even slices
+    juce::Label      sliceCountLabel;
+
+    // ---- MIDI Output (to MPC Sample) ----
+    SectionPanel     midiOutSection { "MIDI OUT -> MPC" };
+    MidiOutputPanel  midiOutputPanel;
+
+    // ---- Tab selector for bottom panel ----
+    juce::TextButton tabBrowserBtn { "BROWSER" };
+    juce::TextButton tabKitBtn     { "KIT" };
+    juce::TextButton tabSlicerBtn  { "SLICER" };
+    juce::TextButton tabMidiBtn    { "MIDI OUT" };
+    int activeTab { 0 };  // 0=browser, 1=kit, 2=slicer, 3=midiout
 
     // ---- APVTS attachments ----
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     std::unique_ptr<SliderAttachment>
         attackAttach, decayAttach, sustainAttach, releaseAttach,
-        cutoffAttach, resAttach,   pitchAttach,
+        cutoffAttach, resAttach, pitchAttach,
         noiseLevelAttach, driftAttach, vhsAttach, cassetteAttach,
         lfoRateAttach, lfoDepthAttach;
-    std::unique_ptr<ComboAttachment>
-        filterTypeAttach, lfoShapeAttach, lfoTargetAttach;
+    std::unique_ptr<ComboAttachment> filterTypeAttach, lfoShapeAttach, lfoTargetAttach;
 
     // ---- Helpers ----
-    void setupKnob    (juce::Slider&, juce::Label&, const juce::String&, bool slate = false);
-    void mouseDown    (const juce::MouseEvent&) override;
-    void styleCombo   (juce::ComboBox&);
+    void setupKnob (juce::Slider&, juce::Label&, const juce::String&, bool slate = false);
+    void mouseDown (const juce::MouseEvent&) override;
+    void styleCombo (juce::ComboBox&);
     void updateFilterButtons();
     void refreshBrowsers();
     void refreshNoiseTags();
+    void switchTab (int index);
+    void setupMpcKitCallbacks();
+    void setupSlicerCallbacks();
+    void launchMpcExport();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DustCrateAudioProcessorEditor)
 };
