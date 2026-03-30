@@ -231,6 +231,10 @@ void LFOPanel::resized()
 DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), mainList(p,laf), noiseList(p,laf)
 {
+    graffitiTypeface = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::SedgwickAveDisplay_Regular_ttf,
+        BinaryData::SedgwickAveDisplay_Regular_ttfSize);
+
     setLookAndFeel(&laf);
     setSize(720, 600);
     setResizable(true,true);
@@ -462,7 +466,10 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
     const int mh=44;
     g.setColour(juce::Colour(0xff161819)); g.fillRect(0,0,getWidth(),mh);
     g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.35f)); g.fillRect(0,mh-1,getWidth(),1);
-    g.setFont(juce::Font("Courier New",20,juce::Font::bold));
+    if (graffitiTypeface != nullptr)
+        g.setFont(juce::Font(graffitiTypeface).withHeight(22.0f));
+    else
+        g.setFont(juce::Font("Courier New", 20, juce::Font::bold)); // fallback
     g.setColour(DustCrateLookAndFeel::amber());
     g.drawText("DUSTCRATE",14,0,220,mh-2,juce::Justification::centredLeft);
     g.setFont(juce::Font("Helvetica Neue",9.5f,juce::Font::plain));
