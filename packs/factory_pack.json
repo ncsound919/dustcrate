@@ -1,0 +1,80 @@
+{
+  "pack": "Factory Pack",
+  "version": "0.1.0",
+  "description": "Curated CC0 vintage sounds — the factory crate.",
+  "license": "CC0",
+  "samples": [
+    {
+      "name": "vinyl_crackle_loop",
+      "filePath": "samples/noise/vinyl_crackle_loop.flac",
+      "category": "noise",
+      "pack": "Factory Pack",
+      "rootNote": 60,
+      "license": "CC0",
+      "source": "https://freesound.org"
+    },
+    {
+      "name": "dusty_strings_c3",
+      "filePath": "samples/melodic/dusty_strings_c3.flac",
+      "category": "melodic",
+      "pack": "Factory Pack",
+      "rootNote": 48,
+      "license": "CC0",
+      "source": "https://freesound.org"
+    },
+    {
+      "name": "old_piano_broken_d4",
+      "filePath": "samples/melodic/old_piano_broken_d4.flac",
+      "category": "melodic",
+      "pack": "Factory Pack",
+      "rootNote": 62,
+      "license": "CC0",
+      "source": "https://archive.org"
+    },
+    {
+      "name": "shortwave_texture_01",
+      "filePath": "samples/textures/shortwave_texture_01.flac",
+      "category": "textures",
+      "pack": "Factory Pack",
+      "rootNote": 60,
+      "license": "CC0",
+      "source": "https://freesound.org"
+    },
+    {
+      "name": "808_kick_vintage",
+      "filePath": "samples/drums/808_kick_vintage.flac",
+      "category": "drums",
+      "pack": "Factory Pack",
+      "rootNote": 36,
+      "license": "CC0",
+      "source": "https://freesound.org"
+    },
+    {
+      "name": "snare_crunch_01",
+      "filePath": "samples/drums/snare_crunch_01.flac",
+      "category": "drums",
+      "pack": "Factory Pack",
+      "rootNote": 38,
+      "license": "CC0",
+      "source": "https://freesound.org"
+    },
+    {
+      "name": "radio_broadcast_chop",
+      "filePath": "samples/vocal/radio_broadcast_chop.flac",
+      "category": "vocal",
+      "pack": "Factory Pack",
+      "rootNote": 60,
+      "license": "Public Domain",
+      "source": "https://archive.org"
+    },
+    {
+      "name": "nasa_launch_texture",
+      "filePath": "samples/textures/nasa_launch_texture.flac",
+      "category": "textures",
+      "pack": "Factory Pack",
+      "rootNote": 60,
+      "license": "Public Domain",
+      "source": "https://www.nasa.gov/audio-and-ringtones/"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+Builds/
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.vst3
+*.component
+
+# IDE
+.vs/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+*.user
+*.suo
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# JUCE generated
+JuceLibraryCode/
+
+# macOS
+.DS_Store
+
+# Samples (too large for git — distribute separately or via LFS)
+assets/samples/*.flac
+assets/samples/*.ogg
+assets/samples/*.wav
+!assets/samples/.gitkeep
