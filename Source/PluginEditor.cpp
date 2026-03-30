@@ -331,6 +331,10 @@ void LFOPanel::resized()
 DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), mainList(p,laf), noiseList(p,laf)
 {
+    graffitiTypeface = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::SedgwickAveDisplay_Regular_ttf,
+        BinaryData::SedgwickAveDisplay_Regular_ttfSize);
+
     setLookAndFeel(&laf);
     setSize(720, 600);
     setResizable(true,true);
