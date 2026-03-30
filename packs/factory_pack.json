@@ -1,80 +1,206 @@
 {
-  "pack": "Factory Pack",
-  "version": "0.1.0",
-  "description": "Curated CC0 vintage sounds — the factory crate.",
-  "license": "CC0",
+  "packName": "Factory Pack",
+  "version": "1.0",
   "samples": [
     {
-      "name": "vinyl_crackle_loop",
-      "filePath": "samples/noise/vinyl_crackle_loop.flac",
+      "name": "Vinyl Surface A",
+      "filePath": "noise/vinyl_surface_a.wav",
       "category": "noise",
-      "pack": "Factory Pack",
+      "subcategory": "VINYL",
       "rootNote": 60,
+      "pack": "Factory Pack",
       "license": "CC0",
-      "source": "https://freesound.org"
+      "source": "user-provided"
     },
     {
-      "name": "dusty_strings_c3",
-      "filePath": "samples/melodic/dusty_strings_c3.flac",
-      "category": "melodic",
-      "pack": "Factory Pack",
-      "rootNote": 48,
-      "license": "CC0",
-      "source": "https://freesound.org"
-    },
-    {
-      "name": "old_piano_broken_d4",
-      "filePath": "samples/melodic/old_piano_broken_d4.flac",
-      "category": "melodic",
-      "pack": "Factory Pack",
-      "rootNote": 62,
-      "license": "CC0",
-      "source": "https://archive.org"
-    },
-    {
-      "name": "shortwave_texture_01",
-      "filePath": "samples/textures/shortwave_texture_01.flac",
-      "category": "textures",
-      "pack": "Factory Pack",
+      "name": "Vinyl Surface B",
+      "filePath": "noise/vinyl_surface_b.wav",
+      "category": "noise",
+      "subcategory": "VINYL",
       "rootNote": 60,
+      "pack": "Factory Pack",
       "license": "CC0",
-      "source": "https://freesound.org"
+      "source": "user-provided"
     },
     {
-      "name": "808_kick_vintage",
-      "filePath": "samples/drums/808_kick_vintage.flac",
+      "name": "Dust & Crackle Light",
+      "filePath": "noise/dust_crackle_light.wav",
+      "category": "noise",
+      "subcategory": "DUST",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Dust & Crackle Heavy",
+      "filePath": "noise/dust_crackle_heavy.wav",
+      "category": "noise",
+      "subcategory": "DUST",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Room Tone Warm",
+      "filePath": "noise/room_tone_warm.wav",
+      "category": "noise",
+      "subcategory": "ROOM",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Room Tone Bright",
+      "filePath": "noise/room_tone_bright.wav",
+      "category": "noise",
+      "subcategory": "ROOM",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "60Hz Hum",
+      "filePath": "noise/hum_60hz.wav",
+      "category": "noise",
+      "subcategory": "HUM",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Tape Hiss",
+      "filePath": "noise/tape_hiss.wav",
+      "category": "noise",
+      "subcategory": "HUM",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Surface Crackle Loop",
+      "filePath": "noise/surface_crackle_loop.wav",
+      "category": "noise",
+      "subcategory": "CRACKLE",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Groove Crackle",
+      "filePath": "noise/groove_crackle.wav",
+      "category": "noise",
+      "subcategory": "CRACKLE",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Kick 808 Deep",
+      "filePath": "drums/kick_808_deep.wav",
       "category": "drums",
-      "pack": "Factory Pack",
+      "subcategory": "KICK",
       "rootNote": 36,
+      "pack": "Factory Pack",
       "license": "CC0",
-      "source": "https://freesound.org"
+      "source": "user-provided"
     },
     {
-      "name": "snare_crunch_01",
-      "filePath": "samples/drums/snare_crunch_01.flac",
+      "name": "Kick Punchy",
+      "filePath": "drums/kick_punchy.wav",
       "category": "drums",
+      "subcategory": "KICK",
+      "rootNote": 36,
       "pack": "Factory Pack",
-      "rootNote": 38,
       "license": "CC0",
-      "source": "https://freesound.org"
+      "source": "user-provided"
     },
     {
-      "name": "radio_broadcast_chop",
-      "filePath": "samples/vocal/radio_broadcast_chop.flac",
-      "category": "vocal",
+      "name": "Snare Crisp",
+      "filePath": "drums/snare_crisp.wav",
+      "category": "drums",
+      "subcategory": "SNARE",
+      "rootNote": 38,
       "pack": "Factory Pack",
-      "rootNote": 60,
-      "license": "Public Domain",
-      "source": "https://archive.org"
+      "license": "CC0",
+      "source": "user-provided"
     },
     {
-      "name": "nasa_launch_texture",
-      "filePath": "samples/textures/nasa_launch_texture.flac",
+      "name": "Snare Fat",
+      "filePath": "drums/snare_fat.wav",
+      "category": "drums",
+      "subcategory": "SNARE",
+      "rootNote": 38,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Hi-Hat Closed",
+      "filePath": "drums/hihat_closed.wav",
+      "category": "drums",
+      "subcategory": "HAT",
+      "rootNote": 42,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Hi-Hat Open",
+      "filePath": "drums/hihat_open.wav",
+      "category": "drums",
+      "subcategory": "HAT",
+      "rootNote": 46,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Rhodes Warm C3",
+      "filePath": "melodic/rhodes_warm_c3.wav",
+      "category": "melodic",
+      "subcategory": "KEYS",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Bass Vintage",
+      "filePath": "melodic/bass_vintage.wav",
+      "category": "melodic",
+      "subcategory": "BASS",
+      "rootNote": 36,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Texture Warm Pad",
+      "filePath": "textures/texture_warm_pad.wav",
       "category": "textures",
-      "pack": "Factory Pack",
+      "subcategory": "PAD",
       "rootNote": 60,
-      "license": "Public Domain",
-      "source": "https://www.nasa.gov/audio-and-ringtones/"
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
+    },
+    {
+      "name": "Texture Atmos",
+      "filePath": "textures/texture_atmos.wav",
+      "category": "textures",
+      "subcategory": "ATMOS",
+      "rootNote": 60,
+      "pack": "Factory Pack",
+      "license": "CC0",
+      "source": "user-provided"
     }
   ]
 }
