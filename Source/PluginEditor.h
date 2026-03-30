@@ -26,17 +26,19 @@ public:
                            bool,bool,bool,bool,bool,const juce::String&,
                            const juce::String&,const juce::Drawable*,
                            const juce::Colour*) override;
-    static juce::Colour body()        { return juce::Colour(0xff1a1c1e); }
-    static juce::Colour panel()       { return juce::Colour(0xff222426); }
-    static juce::Colour panelBorder() { return juce::Colour(0xff2e3032); }
-    static juce::Colour amber()       { return juce::Colour(0xfff0a020); }
-    static juce::Colour amberDim()    { return juce::Colour(0xff8a5a10); }
+    static juce::Colour body()        { return juce::Colour(0xff141517); }
+    static juce::Colour panel()       { return juce::Colour(0xff1e2022); }
+    static juce::Colour panelBorder() { return juce::Colour(0xff2a2c2f); }
+    static juce::Colour amber()       { return juce::Colour(0xffc8921a); }
+    static juce::Colour amberDim()    { return juce::Colour(0xff6b4a0a); }
+    static juce::Colour amberGlow()   { return juce::Colour(0x22c8921a); }
     static juce::Colour slate()       { return juce::Colour(0xff3a8fcc); }
     static juce::Colour slateDim()    { return juce::Colour(0xff1a4466); }
-    static juce::Colour textPri()     { return juce::Colour(0xffe8e0d0); }
-    static juce::Colour textSec()     { return juce::Colour(0xff7a7268); }
-    static juce::Colour rowSel()      { return juce::Colour(0xff2a2c2e); }
-    static juce::Colour knobTrack()   { return juce::Colour(0xff303234); }
+    static juce::Colour textPri()     { return juce::Colour(0xffe4dcc8); }
+    static juce::Colour textSec()     { return juce::Colour(0xff6a6258); }
+    static juce::Colour rowSel()      { return juce::Colour(0xff282a2c); }
+    static juce::Colour knobTrack()   { return juce::Colour(0xff2c2e30); }
+    static juce::Colour knobBody()    { return juce::Colour(0xff252729); }
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DustCrateLookAndFeel)
 };

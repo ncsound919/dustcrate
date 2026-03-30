@@ -32,22 +32,48 @@ void DustCrateLookAndFeel::drawRotarySlider(juce::Graphics& g,
     const float cx = x + w * .5f, cy = y + h * .5f;
     const float r  = juce::jmin(w, h) * .38f;
     const float angle = startA + pos * (endA - startA);
+
+    // Arc track
     juce::Path track; track.addCentredArc(cx,cy,r,r,0,startA,endA,true);
     g.setColour(knobTrack()); g.strokePath(track, juce::PathStrokeType(2.5f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+
+    // Value arc
     juce::Path val; val.addCentredArc(cx,cy,r,r,0,startA,angle,true);
     g.setColour(accent); g.strokePath(val, juce::PathStrokeType(2.5f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+
+    // Glowing cap at arc endpoint
+    const float capX = cx + r * std::sin(angle);
+    const float capY = cy - r * std::cos(angle);
+    g.setColour(accent.withAlpha(0.25f)); g.fillEllipse(capX-4.5f, capY-4.5f, 9.0f, 9.0f);
+    g.setColour(accent);                  g.fillEllipse(capX-2.5f, capY-2.5f, 5.0f, 5.0f);
+
+    // Knob body with gradient (top-left lighter → bottom-right knobBody)
     const float kr = r * .68f;
-    g.setColour(juce::Colour(0xff2c2e30)); g.fillEllipse(cx-kr,cy-kr,kr*2,kr*2);
-    g.setColour(juce::Colour(0xff161718)); g.drawEllipse(cx-kr,cy-kr,kr*2,kr*2,1);
+    juce::ColourGradient bodyGrad(juce::Colour(0xff353739), cx-kr, cy-kr,
+                                  knobBody(), cx+kr, cy+kr, false);
+    g.setGradientFill(bodyGrad);
+    g.fillEllipse(cx-kr, cy-kr, kr*2, kr*2);
+
+    // Dark ring around knob body
+    g.setColour(juce::Colour(0xff101112)); g.drawEllipse(cx-kr, cy-kr, kr*2, kr*2, 1.0f);
+
+    // Indicator dot
     const float dd = kr * .62f;
     g.setColour(accent);
     g.fillEllipse(cx+dd*std::sin(angle)-2.2f, cy-dd*std::cos(angle)-2.2f, 4.4f, 4.4f);
+
+    // Specular highlight (top-left quadrant, white at 8% alpha)
+    g.setColour(juce::Colours::white.withAlpha(0.08f));
+    g.fillEllipse(cx-kr*0.6f, cy-kr*0.7f, kr*0.55f, kr*0.4f);
 }
 
 void DustCrateLookAndFeel::drawComboBox(juce::Graphics& g,int w,int h,bool,int,int,int,int,juce::ComboBox&)
 {
-    g.setColour(panel());       g.fillRoundedRectangle(0,0,(float)w,(float)h,3);
-    g.setColour(panelBorder()); g.drawRoundedRectangle(.5f,.5f,w-1.f,h-1.f,3,1);
+    g.setColour(panel());       g.fillRoundedRectangle(0,0,(float)w,(float)h,4);
+    g.setColour(panelBorder()); g.drawRoundedRectangle(.5f,.5f,w-1.f,h-1.f,4,.8f);
+    // Amber accent line on left edge
+    g.setColour(amber().withAlpha(0.6f)); g.fillRoundedRectangle(0,0,2,(float)h,1);
+    // Chevron dropdown arrow
     const float ax=w-14,ay=h*.5f;
     juce::Path arr; arr.startNewSubPath(ax,ay-2.5f); arr.lineTo(ax+5,ay+2.5f); arr.lineTo(ax+10,ay-2.5f);
     g.setColour(textSec()); g.strokePath(arr, juce::PathStrokeType(1.2f));
@@ -66,7 +92,10 @@ void DustCrateLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rect
     const juce::Drawable*, const juce::Colour*)
 {
     if (sep) { g.setColour(panelBorder()); g.fillRect(area.getX()+4,area.getCentreY(),area.getWidth()-8,1); return; }
-    if (hi)  { g.setColour(rowSel()); g.fillRoundedRectangle(area.reduced(2,1).toFloat(),3); }
+    if (hi)  {
+        g.setColour(rowSel()); g.fillRoundedRectangle(area.reduced(2,1).toFloat(),3);
+        g.setColour(amber()); g.fillRect(area.getX(), area.getY(), 2, area.getHeight());
+    }
     g.setColour(active?(hi?amber():textPri()):textSec());
     g.setFont(juce::Font("Helvetica Neue",11.5f,juce::Font::plain));
     g.drawText(text,area.reduced(8,0),juce::Justification::centredLeft);
@@ -87,9 +116,26 @@ void CategoryTagBar::paint(juce::Graphics& g)
         const bool sel=cat.equalsIgnoreCase(selectedCategory);
         const int tw=16+juce::Font("Helvetica Neue",10.5f,juce::Font::plain).getStringWidth(cat);
         juce::Rectangle<float> pill((float)x,2,(float)tw,(float)ph);
-        if(sel){g.setColour(DustCrateLookAndFeel::amber());g.fillRoundedRectangle(pill,ph*.5f);g.setColour(DustCrateLookAndFeel::body());}
-        else{g.setColour(DustCrateLookAndFeel::panelBorder());g.drawRoundedRectangle(pill,ph*.5f,1);g.setColour(DustCrateLookAndFeel::textSec());}
-        g.setFont(juce::Font("Helvetica Neue",10.5f,juce::Font::plain));
+        if (sel)
+        {
+            // Outer amber glow
+            g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.2f));
+            g.fillRoundedRectangle(pill.expanded(1.5f),(ph+3)*.5f);
+            // Filled pill
+            g.setColour(DustCrateLookAndFeel::amber());
+            g.fillRoundedRectangle(pill,ph*.5f);
+            g.setColour(DustCrateLookAndFeel::body());
+            g.setFont(juce::Font("Helvetica Neue",10.5f,juce::Font::bold));
+        }
+        else
+        {
+            g.setColour(DustCrateLookAndFeel::panel().withAlpha(0.5f));
+            g.fillRoundedRectangle(pill,ph*.5f);
+            g.setColour(DustCrateLookAndFeel::panelBorder());
+            g.drawRoundedRectangle(pill,ph*.5f,1);
+            g.setColour(DustCrateLookAndFeel::textSec());
+            g.setFont(juce::Font("Helvetica Neue",10.5f,juce::Font::plain));
+        }
         g.drawText(cat,(int)pill.getX(),(int)pill.getY(),(int)pill.getWidth(),(int)pill.getHeight(),juce::Justification::centred);
         x+=tw+4;
     }
@@ -121,19 +167,40 @@ void SampleBrowserList::setEntries(const juce::Array<SampleEntry>& e) { entries=
 int  SampleBrowserList::getNumRows() { return entries.size(); }
 void SampleBrowserList::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool sel)
 {
-    if(sel){g.setColour(DustCrateLookAndFeel::rowSel());g.fillRect(0,0,w,h);g.setColour(DustCrateLookAndFeel::amber());g.fillRect(0,2,2,h-4);}
-    if(!juce::isPositiveAndBelow(row,entries.size())) return;
+    if (sel)
+    {
+        g.setColour(DustCrateLookAndFeel::rowSel());    g.fillRect(0,0,w,h);
+        g.setColour(DustCrateLookAndFeel::amberGlow()); g.fillRect(0,0,w,h);
+        g.setColour(DustCrateLookAndFeel::amber());     g.fillRect(0,0,3,h);
+    }
+    // Row separator
+    g.setColour(DustCrateLookAndFeel::panelBorder().withAlpha(0.4f));
+    g.fillRect(0, h-1, w, 1);
+
+    if (!juce::isPositiveAndBelow(row,entries.size())) return;
     const auto& e=entries[row];
+
+    // Play triangle icon (5×6 px, vertically centred at x=10)
+    const float triAlpha = sel ? 1.0f : 0.35f;
+    g.setColour(DustCrateLookAndFeel::amber().withAlpha(triAlpha));
+    juce::Path tri;
+    const float ty = h * 0.5f;
+    tri.addTriangle(10.0f, ty-3.0f, 10.0f, ty+3.0f, 16.0f, ty);
+    g.fillPath(tri);
+
+    // Category badge pill (right side)
     const juce::String badge=e.subcategory.isEmpty()?e.category.toUpperCase().substring(0,4):e.subcategory.substring(0,4);
     const int bw=32,bx=w-bw-6;
-    g.setColour(sel?DustCrateLookAndFeel::amberDim():DustCrateLookAndFeel::panelBorder());
+    g.setColour(DustCrateLookAndFeel::panelBorder());
     g.fillRoundedRectangle((float)bx,5,(float)bw,(float)(h-10),2);
-    g.setColour(sel?DustCrateLookAndFeel::amber():DustCrateLookAndFeel::textSec());
+    g.setColour(DustCrateLookAndFeel::textSec());
     g.setFont(juce::Font("Helvetica Neue",8.5f,juce::Font::plain));
     g.drawText(badge,bx,0,bw,h,juce::Justification::centred);
-    g.setColour(sel?DustCrateLookAndFeel::textPri():DustCrateLookAndFeel::textPri().withAlpha(0.75f));
-    g.setFont(juce::Font("Helvetica Neue",12,juce::Font::plain));
-    g.drawText(e.name,10,0,bx-14,h,juce::Justification::centredLeft);
+
+    // Sample name — monospace, starting at x=24
+    g.setColour(DustCrateLookAndFeel::textPri());
+    g.setFont(juce::Font("Courier New",12,juce::Font::plain));
+    g.drawText(e.name,24,0,bx-14,h,juce::Justification::centredLeft);
 }
 void SampleBrowserList::listBoxItemClicked(int row, const juce::MouseEvent&)
 { selectedRow=row; if(juce::isPositiveAndBelow(row,entries.size())&&onSampleSelected) onSampleSelected(entries[row]); }
@@ -148,12 +215,32 @@ SectionPanel::SectionPanel(const juce::String& t, bool s) : title(t), slateAccen
 void SectionPanel::paint(juce::Graphics& g)
 {
     auto b=getLocalBounds().toFloat();
-    g.setColour(DustCrateLookAndFeel::panel()); g.fillRoundedRectangle(b,5);
-    g.setColour(DustCrateLookAndFeel::panelBorder()); g.drawRoundedRectangle(b.reduced(.5f),5,.8f);
     const auto accent=slateAccent?DustCrateLookAndFeel::slate():DustCrateLookAndFeel::amber();
-    juce::Path top; top.addRoundedRectangle(b.getX(),b.getY(),b.getWidth(),3,3,3,true,true,false,false);
-    g.setColour(accent); g.fillPath(top);
-    g.setColour(accent); g.setFont(juce::Font("Helvetica Neue",9.5f,juce::Font::bold));
+
+    // Panel background and border
+    g.setColour(DustCrateLookAndFeel::panel()); g.fillRoundedRectangle(b,6);
+    g.setColour(DustCrateLookAndFeel::panelBorder()); g.drawRoundedRectangle(b.reduced(.5f),6,.8f);
+
+    // Header strip: gradient from accent tint to transparent, left-to-right
+    const auto gradStart = slateAccent ? DustCrateLookAndFeel::slateDim().withAlpha(0.18f)
+                                       : DustCrateLookAndFeel::amber().withAlpha(0.18f);
+    juce::ColourGradient hdrGrad(gradStart, b.getX(), b.getY(),
+                                 juce::Colours::transparentBlack, b.getRight(), b.getY(), false);
+    g.setGradientFill(hdrGrad);
+    juce::Path hdrPath;
+    hdrPath.addRoundedRectangle(b.getX(), b.getY(), b.getWidth(), (float)kHeaderH, 6, 6, true, true, false, false);
+    g.fillPath(hdrPath);
+
+    // 2px accent line at top edge (top corners only)
+    juce::Path topLine;
+    topLine.addRoundedRectangle(b.getX(), b.getY(), b.getWidth(), 2.0f, 2, 2, true, true, false, false);
+    g.setColour(accent.withAlpha(0.8f)); g.fillPath(topLine);
+
+    // Section title with text shadow
+    g.setFont(juce::Font("Helvetica Neue",9.5f,juce::Font::bold));
+    g.setColour(juce::Colour(0x44000000));
+    g.drawText(title,(int)b.getX()+9,(int)b.getY()+4,(int)b.getWidth()-16,kHeaderH-3,juce::Justification::centredLeft);
+    g.setColour(accent);
     g.drawText(title,(int)b.getX()+8,(int)b.getY()+3,(int)b.getWidth()-16,kHeaderH-3,juce::Justification::centredLeft);
 }
 void SectionPanel::addChildAndMakeVisible(juce::Component& c) { addAndMakeVisible(c); }
@@ -203,10 +290,23 @@ LFOPanel::LFOPanel()
 }
 void LFOPanel::paint(juce::Graphics& g)
 {
-    g.setColour(DustCrateLookAndFeel::slateDim().withAlpha(0.25f));
-    g.fillRoundedRectangle(getLocalBounds().toFloat(),4);
-    g.setColour(DustCrateLookAndFeel::slate().withAlpha(0.4f));
-    g.drawRoundedRectangle(getLocalBounds().reduced(1).toFloat(),4,0.6f);
+    auto b = getLocalBounds().toFloat();
+
+    // Base fill
+    g.setColour(DustCrateLookAndFeel::slateDim().withAlpha(0.3f));
+    g.fillRoundedRectangle(b, 5);
+
+    // Gradient overlay: slate tint top-left → transparent bottom-right
+    juce::ColourGradient overlay(DustCrateLookAndFeel::slate().withAlpha(0.08f), b.getX(), b.getY(),
+                                 juce::Colours::transparentBlack, b.getRight(), b.getBottom(), false);
+    g.setGradientFill(overlay);
+    g.fillRoundedRectangle(b, 5);
+
+    // Border
+    g.setColour(DustCrateLookAndFeel::slate().withAlpha(0.35f));
+    g.drawRoundedRectangle(b.reduced(0.5f), 5, 0.7f);
+
+    // "LFO" label
     g.setColour(DustCrateLookAndFeel::slate());
     g.setFont(juce::Font("Helvetica Neue",8.5f,juce::Font::bold));
     g.drawText("LFO",4,2,30,12,juce::Justification::centredLeft);
@@ -458,21 +558,60 @@ void DustCrateAudioProcessorEditor::refreshBrowsers()
 
 void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
 {
+    const auto bounds = getLocalBounds();
+    const int W = bounds.getWidth(), H = bounds.getHeight();
+    const int mh = 44;
+
+    // ── Background ──────────────────────────────────────────────────────────
     g.fillAll(DustCrateLookAndFeel::body());
-    const int mh=44;
-    g.setColour(juce::Colour(0xff161819)); g.fillRect(0,0,getWidth(),mh);
-    g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.35f)); g.fillRect(0,mh-1,getWidth(),1);
-    g.setFont(juce::Font("Courier New",20,juce::Font::bold));
+
+    // Noise/grain texture: 1×1 dot every 3px
+    g.setColour(DustCrateLookAndFeel::textSec().withAlpha(0.04f));
+    for (int py = 0; py < H; py += 3)
+        for (int px = 0; px < W; px += 3)
+            g.fillRect(px, py, 1, 1);
+
+    // Vignette: radial gradient, center transparent → edges dark
+    juce::ColourGradient vignette(juce::Colours::transparentBlack, (float)W * 0.5f, (float)H * 0.5f,
+                                  juce::Colour(0x33000000), 0.0f, 0.0f, true);
+    g.setGradientFill(vignette);
+    g.fillRect(bounds);
+
+    // ── Header ───────────────────────────────────────────────────────────────
+    // Radial gradient: centre slightly brighter, fading to body() at edges
+    juce::ColourGradient hdrGrad(juce::Colour(0xff1e2022), (float)W * 0.5f, (float)mh * 0.5f,
+                                 DustCrateLookAndFeel::body(), 0.0f, 0.0f, true);
+    g.setGradientFill(hdrGrad);
+    g.fillRect(0, 0, W, mh);
+
+    // 1px amber line at bottom of header (alpha 0.5)
+    g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.5f));
+    g.fillRect(0, mh-1, W, 1);
+
+    // Title "DUSTCRATE" — Courier New bold (or velumStroke if available)
+    juce::Font titleFont;
+    if (velumStrokeTypeface != nullptr)
+        titleFont = juce::Font(velumStrokeTypeface).withHeight(22).boldened();
+    else
+        titleFont = juce::Font("Courier New", 22, juce::Font::bold);
+    g.setFont(titleFont);
     g.setColour(DustCrateLookAndFeel::amber());
-    g.drawText("DUSTCRATE",14,0,220,mh-2,juce::Justification::centredLeft);
-    g.setFont(juce::Font("Helvetica Neue",9.5f,juce::Font::plain));
+    g.drawText("DUSTCRATE", 14, 0, 220, mh-2, juce::Justification::centredLeft);
+
+    // Subtitle
+    g.setFont(juce::Font("Helvetica Neue", 9, juce::Font::plain));
     g.setColour(DustCrateLookAndFeel::textSec());
-    g.drawText("DIGITAL CRATE  \xb7  MPC SAMPLE COMPANION",14,24,340,14,juce::Justification::centredLeft);
-    g.setColour(DustCrateLookAndFeel::panelBorder());
-    g.fillRoundedRectangle((float)(getWidth()-48),14,38,16,3);
+    g.drawText("DIGITAL CRATE  \xb7  MPC SAMPLE COMPANION", 14, 26, 340, 14, juce::Justification::centredLeft);
+
+    // ── Status bar at bottom ─────────────────────────────────────────────────
+    const int statusH = 16;
+    g.setColour(juce::Colour(0xff111213));
+    g.fillRect(0, H - statusH, W, statusH);
+    g.setFont(juce::Font("Helvetica Neue", 9, juce::Font::plain));
+    g.setColour(juce::Colour(0xff3aaa55));
+    g.drawText("\xe2\x97\x8f READY", 8, H - statusH, 60, statusH, juce::Justification::centredLeft);
     g.setColour(DustCrateLookAndFeel::textSec());
-    g.setFont(juce::Font("Helvetica Neue",9,juce::Font::plain));
-    g.drawText("v0.1",getWidth()-48,14,38,16,juce::Justification::centred);
+    g.drawText("DustCrate v0.1 beta", 0, H - statusH, W - 8, statusH, juce::Justification::centredRight);
 }
 
 void DustCrateAudioProcessorEditor::resized()
