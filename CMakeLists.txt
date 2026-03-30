@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(DustCrate VERSION 0.1.0)
 
-# --- JUCE ---
-# Add JUCE as a submodule: git submodule add https://github.com/juce-framework/JUCE.git JUCE
 add_subdirectory(JUCE)
 
 juce_add_plugin(DustCrate
@@ -25,6 +23,8 @@ target_sources(DustCrate
         Source/PluginEditor.cpp
         Source/SampleLibrary.cpp
         Source/SampleVoice.cpp
+        Source/CharacterProcessor.cpp
+        Source/WaveformDisplay.cpp
 )
 
 target_compile_definitions(DustCrate
@@ -49,7 +49,6 @@ target_link_libraries(DustCrate
         juce::juce_recommended_warning_flags
 )
 
-# Bundle assets
 juce_add_binary_data(DustCrateAssets
     SOURCES
         assets/samples/.gitkeep
