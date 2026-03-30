@@ -2,27 +2,24 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "WaveformDisplay.h"
+#include "PresetBrowserBar.h"
+#include "SamplePreview.h"
+#include "PackImportWizard.h"
 
 //==============================================================================
 class DustCrateLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     DustCrateLookAndFeel();
-
-    void drawRotarySlider(juce::Graphics&, int x, int y, int w, int h,
-                          float sliderPos, float startAngle, float endAngle,
-                          juce::Slider&) override;
-    void drawComboBox(juce::Graphics&, int w, int h, bool down,
-                      int bx, int by, int bw, int bh,
-                      juce::ComboBox&) override;
+    void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
+    void drawComboBox(juce::Graphics&,int,int,bool,int,int,int,int,juce::ComboBox&) override;
     juce::Font getComboBoxFont(juce::ComboBox&) override;
-    void drawLabel(juce::Graphics&, juce::Label&) override;
-    void drawPopupMenuBackground(juce::Graphics&, int w, int h) override;
-    void drawPopupMenuItem(juce::Graphics&, const juce::Rectangle<int>&,
-                           bool sep, bool active, bool highlighted, bool ticked,
-                           bool sub, const juce::String& text,
-                           const juce::String& shortcut,
-                           const juce::Drawable*, const juce::Colour*) override;
+    void drawLabel(juce::Graphics&,juce::Label&) override;
+    void drawPopupMenuBackground(juce::Graphics&,int,int) override;
+    void drawPopupMenuItem(juce::Graphics&,const juce::Rectangle<int>&,
+                           bool,bool,bool,bool,bool,const juce::String&,
+                           const juce::String&,const juce::Drawable*,
+                           const juce::Colour*) override;
 
     static juce::Colour body()        { return juce::Colour(0xff1a1c1e); }
     static juce::Colour panel()       { return juce::Colour(0xff222426); }
@@ -56,25 +53,23 @@ private:
 };
 
 //==============================================================================
-class SampleBrowserList : public juce::Component,
-                          public juce::ListBoxModel
+class SampleBrowserList : public juce::Component, public juce::ListBoxModel
 {
 public:
     SampleBrowserList(DustCrateAudioProcessor&, DustCrateLookAndFeel&);
     void setEntries(const juce::Array<SampleEntry>&);
     int  getNumRows() override;
-    void paintListBoxItem(int row, juce::Graphics&,
-                          int w, int h, bool sel) override;
-    void listBoxItemClicked(int, const juce::MouseEvent&) override;
-    void listBoxItemDoubleClicked(int, const juce::MouseEvent&) override;
+    void paintListBoxItem(int,juce::Graphics&,int,int,bool) override;
+    void listBoxItemClicked(int,const juce::MouseEvent&) override;
+    void listBoxItemDoubleClicked(int,const juce::MouseEvent&) override;
     void resized() override;
     std::function<void(const SampleEntry&)> onSampleSelected;
     std::function<void(const SampleEntry&)> onSampleTriggered;
     int selectedRow { -1 };
 private:
     DustCrateAudioProcessor& processor;
-    DustCrateLookAndFeel& laf;
-    juce::ListBox listBox { "browser", this };
+    DustCrateLookAndFeel&    laf;
+    juce::ListBox            listBox { "browser", this };
     juce::Array<SampleEntry> entries;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SampleBrowserList)
 };
@@ -89,12 +84,29 @@ public:
     static constexpr int kHeaderH = 20;
 private:
     juce::String title;
-    bool slateAccent;
+    bool         slateAccent;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SectionPanel)
 };
 
 //==============================================================================
-class DustCrateAudioProcessorEditor : public juce::AudioProcessorEditor
+// LFO Control Panel (slate-accented strip inside CHARACTER section)
+class LFOPanel : public juce::Component
+{
+public:
+    LFOPanel();
+    void resized() override;
+    void paint(juce::Graphics&) override;
+
+    juce::Slider   rateSlider, depthSlider;
+    juce::ComboBox shapeCombo, targetCombo;
+    juce::Label    rateLabel, depthLabel;
+private:
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LFOPanel)
+};
+
+//==============================================================================
+class DustCrateAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                       public juce::FileDragAndDropTarget
 {
 public:
     explicit DustCrateAudioProcessorEditor(DustCrateAudioProcessor&);
@@ -102,21 +114,37 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
+    // FileDragAndDropTarget
+    bool isInterestedInFileDrag(const juce::StringArray& f) override { return packWizard.isInterestedInFileDrag(f); }
+    void filesDropped(const juce::StringArray& f, int x, int y)     override { packWizard.filesDropped(f, x, y); }
+
 private:
     DustCrateAudioProcessor& audioProcessor;
-    DustCrateLookAndFeel laf;
+    DustCrateLookAndFeel     laf;
+
+    // Header
+    PresetBrowserBar presetBar { audioProcessor.apvts };
 
     // Waveform
     WaveformDisplay waveform;
 
     // Browsers
-    SectionPanel soundsPanel  { "SOUNDS" };
-    SectionPanel noisePanel   { "VINYL / NOISE" };
-    CategoryTagBar soundTagBar;
-    juce::TextEditor searchBox;
-    juce::ComboBox   packFilter;
+    SectionPanel      soundsPanel  { "SOUNDS" };
+    SectionPanel      noisePanel   { "VINYL / NOISE" };
+    CategoryTagBar    soundTagBar;
+    CategoryTagBar    noiseTagBar;   // subcategory filter for vinyl browser
+    juce::TextEditor  searchBox;
+    juce::ComboBox    packFilter;
     SampleBrowserList mainList;
     SampleBrowserList noiseList;
+
+    // Sample preview (single-click audition)
+    SamplePreview samplePreview;
+    juce::Slider  previewTrimSlider;
+    juce::Label   previewTrimLabel;
+
+    // Pack import
+    PackImportWizard packWizard { audioProcessor.getSampleLibrary() };
 
     // Envelope
     SectionPanel envelopePanel { "ENVELOPE" };
@@ -134,16 +162,23 @@ private:
     juce::Slider noiseLevelSlider, driftSlider, vhsSlider, cassetteSlider;
     juce::Label  noiseLabelKnob, driftLabel, vhsLabel, cassetteLabel;
 
+    // LFO panel (inside character)
+    LFOPanel lfoPanel;
+
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
-    std::unique_ptr<SliderAttachment> attackAttach, decayAttach, sustainAttach, releaseAttach,
-                                      cutoffAttach, resAttach, pitchAttach,
-                                      noiseLevelAttach, driftAttach, vhsAttach, cassetteAttach;
-    std::unique_ptr<ComboAttachment>  filterTypeAttach;
+    std::unique_ptr<SliderAttachment>
+        attackAttach, decayAttach, sustainAttach, releaseAttach,
+        cutoffAttach, resAttach, pitchAttach,
+        noiseLevelAttach, driftAttach, vhsAttach, cassetteAttach,
+        lfoRateAttach, lfoDepthAttach;
+    std::unique_ptr<ComboAttachment>
+        filterTypeAttach, lfoShapeAttach, lfoTargetAttach;
 
-    void setupKnob(juce::Slider&, juce::Label&, const juce::String&, bool slate = false);
-    void styleCombo(juce::ComboBox&);
-    void refreshBrowsers();
+    void setupKnob       (juce::Slider&, juce::Label&, const juce::String&, bool slate = false);
+    void styleCombo      (juce::ComboBox&);
+    void refreshBrowsers ();
+    void refreshNoiseTags();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DustCrateAudioProcessorEditor)
 };
