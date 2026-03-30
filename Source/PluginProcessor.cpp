@@ -8,7 +8,7 @@ DustCrateAudioProcessor::DustCrateAudioProcessor()
 {
     formatManager.registerBasicFormats(); // WAV, AIFF, FLAC, OGG
 
-    // Add 16 voices to the synthesiser
+    // Polyphonic rompler-style synth
     for (int i = 0; i < 16; ++i)
         synth.addVoice(new SampleVoice());
 
@@ -17,44 +17,57 @@ DustCrateAudioProcessor::DustCrateAudioProcessor()
 
 DustCrateAudioProcessor::~DustCrateAudioProcessor() {}
 
+//==============================================================================
 void DustCrateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    juce::ignoreUnused(samplesPerBlock);
     synth.setCurrentPlaybackSampleRate(sampleRate);
-    // Prepare DSP chain here if adding convolution/reverb later
 }
 
 void DustCrateAudioProcessor::releaseResources() {}
 
 void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
-                                            juce::MidiBuffer& midiMessages)
+                                           juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    // Merge any UI-generated preview MIDI into the host MIDI stream
+    if (! pendingMidi.isEmpty())
+    {
+        for (const auto meta : pendingMidi)
+            midiMessages.addEvent(meta.getMessage(), meta.samplePosition);
+        pendingMidi.clear();
+    }
+
     buffer.clear();
     synth.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
+
+    // TODO: apply global character processing (Drift / VHS / Cassette) here
 }
 
+//==============================================================================
 void DustCrateAudioProcessor::triggerSample(const juce::String& filePath,
-                                             int midiNote, float velocity)
+                                            int midiNote, float velocity)
 {
-    // Load sample into voices and send a MIDI note-on
-    auto* file = new juce::File(filePath);
-    auto* reader = formatManager.createReaderFor(*file);
-    if (reader == nullptr) return;
+    const juce::File file(filePath);
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
+    if (reader == nullptr)
+        return;
 
-    // Pass reader to voices via a shared ptr approach in SampleVoice
+    // Install reader into all SampleVoice instances
     for (int i = 0; i < synth.getNumVoices(); ++i)
     {
         if (auto* voice = dynamic_cast<SampleVoice*>(synth.getVoice(i)))
         {
-            voice->setReader(formatManager.createReaderFor(*file), midiNote);
-            break;
+            // AudioFormatReaderSource takes ownership of the reader when
+            // configured to delete the reader when done.
+            voice->setReader(reader.release(), midiNote);
+            break; // one shared reader is enough for now
         }
     }
 
-    juce::MidiBuffer midi;
-    midi.addEvent(juce::MidiMessage::noteOn(1, midiNote, velocity), 0);
-    synth.renderNextBlock(
-        *new juce::AudioBuffer<float>(2, 0), midi, 0, 0);
+    juce::MidiMessage on = juce::MidiMessage::noteOn(1, midiNote, velocity);
+    pendingMidi.addEvent(on, 0);
 }
 
 void DustCrateAudioProcessor::stopAllVoices()
@@ -62,32 +75,51 @@ void DustCrateAudioProcessor::stopAllVoices()
     synth.allNotesOff(0, true);
 }
 
+//==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout
 DustCrateAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+    // Amplitude envelope
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "attack",  "Attack",  0.001f, 2.0f,  0.01f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "decay",   "Decay",   0.001f, 2.0f,  0.1f));
+        "decay",   "Decay",   0.001f, 2.0f,  0.10f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "sustain", "Sustain", 0.0f,   1.0f,  0.8f));
+        "sustain", "Sustain", 0.0f,   1.0f,  0.80f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "release", "Release", 0.001f, 4.0f,  0.2f));
+        "release", "Release", 0.001f, 4.0f,  0.20f));
+
+    // Filter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "filterCutoff", "Filter Cutoff", 20.0f, 20000.0f, 8000.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "filterRes", "Filter Resonance", 0.1f, 10.0f, 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "filterType", "Filter Type",
-        juce::StringArray{"Lowpass", "Highpass"}, 0));
+        juce::StringArray { "Lowpass", "Highpass" }, 0));
+
+    // Global pitch offset
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "pitchSemitones", "Pitch (semitones)", -24.0f, 24.0f, 0.0f));
+
+    // Noise layer macro (for future use)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "noiseLevel", "Noise Level", 0.0f, 1.0f, 0.35f));
+
+    // Character macros
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "driftAmount", "Drift", 0.0f, 1.0f, 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "vhsAmount", "VHS", 0.0f, 1.0f, 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "cassetteAmount", "Cassette", 0.0f, 1.0f, 0.0f));
 
     return { params.begin(), params.end() };
 }
 
+//==============================================================================
 void DustCrateAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
@@ -102,6 +134,13 @@ void DustCrateAudioProcessor::setStateInformation(const void* data, int sizeInBy
         apvts.replaceState(juce::ValueTree::fromXml(*xml));
 }
 
+//==============================================================================
+juce::AudioProcessorEditor* DustCrateAudioProcessor::createEditor()
+{
+    return new DustCrateAudioProcessorEditor(*this);
+}
+
+//==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new DustCrateAudioProcessor();

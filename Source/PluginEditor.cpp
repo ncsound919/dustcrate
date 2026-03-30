@@ -1,17 +1,18 @@
 #include "PluginEditor.h"
 
-// ──────────────────────────────────────────────
+//==============================================================================
 // SampleBrowserList
-// ──────────────────────────────────────────────
+//==============================================================================
 
 SampleBrowserList::SampleBrowserList(DustCrateAudioProcessor& p)
     : processor(p)
 {
     addAndMakeVisible(listBox);
-    listBox.setModel(this);
-    listBox.setRowHeight(28);
+    listBox.setRowHeight(24);
     listBox.setColour(juce::ListBox::backgroundColourId,
-                     juce::Colour(0xff1a1a1a));
+                      juce::Colour(0xff151515));
+    listBox.setColour(juce::ListBox::outlineColourId,
+                      juce::Colour(0xff303030));
 }
 
 void SampleBrowserList::setEntries(const juce::Array<SampleEntry>& newEntries)
@@ -21,31 +22,39 @@ void SampleBrowserList::setEntries(const juce::Array<SampleEntry>& newEntries)
     listBox.repaint();
 }
 
-int SampleBrowserList::getNumRows() { return entries.size(); }
-
-void SampleBrowserList::paintListBoxItem(int row, juce::Graphics& g,
-                                          int width, int height, bool selected)
+int SampleBrowserList::getNumRows()
 {
-    if (selected)
-        g.fillAll(juce::Colour(0xff3a3a3a));
+    return entries.size();
+}
 
-    g.setColour(juce::Colour(0xffb0a090)); // warm dusty beige
+void SampleBrowserList::paintListBoxItem(int rowNumber, juce::Graphics& g,
+                                         int width, int height,
+                                         bool rowIsSelected)
+{
+    if (rowIsSelected)
+        g.fillAll(juce::Colour(0xff333333));
+
+    g.setColour(juce::Colour(0xffc6b18b)); // warm dusty tone
     g.setFont(13.0f);
-    if (row < entries.size())
-        g.drawText(juce::String("\u25b6 ") + entries[row].name,
-                   6, 0, width - 6, height,
+
+    if (juce::isPositiveAndBelow(rowNumber, entries.size()))
+    {
+        auto text = juce::String("\u25b6  ") + entries[rowNumber].name;
+        g.drawText(text, 6, 0, width - 8, height,
                    juce::Justification::centredLeft);
+    }
 }
 
 void SampleBrowserList::listBoxItemClicked(int row, const juce::MouseEvent&)
 {
-    if (row < entries.size() && onSampleSelected)
+    if (juce::isPositiveAndBelow(row, entries.size()) && onSampleSelected)
         onSampleSelected(entries[row]);
 }
 
-void SampleBrowserList::listBoxItemDoubleClicked(int row, const juce::MouseEvent&)
+void SampleBrowserList::listBoxItemDoubleClicked(int row,
+                                                 const juce::MouseEvent&)
 {
-    if (row < entries.size() && onSampleTriggered)
+    if (juce::isPositiveAndBelow(row, entries.size()) && onSampleTriggered)
         onSampleTriggered(entries[row]);
 }
 
@@ -54,24 +63,28 @@ void SampleBrowserList::resized()
     listBox.setBounds(getLocalBounds());
 }
 
-// ──────────────────────────────────────────────
-// Editor
-// ──────────────────────────────────────────────
+//==============================================================================
+// DustCrateAudioProcessorEditor
+//==============================================================================
 
 DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(
     DustCrateAudioProcessor& p)
-    : AudioProcessorEditor(&p), audioProcessor(p), sampleList(p)
+    : AudioProcessorEditor(&p),
+      audioProcessor(p),
+      mainList(p),
+      noiseList(p)
 {
-    setSize(520, 480);
+    setSize(620, 520);
     setResizable(true, true);
 
-    // Category + Pack filters
+    // Filters & search
     addAndMakeVisible(categoryFilter);
     addAndMakeVisible(packFilter);
     addAndMakeVisible(searchBox);
+
     categoryFilter.addItem("All Categories", 1);
     packFilter.addItem("All Packs", 1);
-    searchBox.setTextToShowWhenEmpty("Search...",
+    searchBox.setTextToShowWhenEmpty("Search crates...",
                                      juce::Colours::grey);
 
     auto& lib = audioProcessor.getSampleLibrary();
@@ -81,17 +94,37 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(
     for (auto& pack : lib.getPacks())
         packFilter.addItem(pack, id++);
 
-    categoryFilter.onChange = [this] { refreshBrowser(); };
-    packFilter.onChange     = [this] { refreshBrowser(); };
-    searchBox.onTextChange  = [this] { refreshBrowser(); };
+    categoryFilter.onChange = [this] { refreshBrowsers(); };
+    packFilter.onChange     = [this] { refreshBrowsers(); };
+    searchBox.onTextChange  = [this] { refreshBrowsers(); };
 
-    addAndMakeVisible(sampleList);
-    sampleList.onSampleTriggered = [this](const SampleEntry& e) {
+    // Browsers
+    addAndMakeVisible(mainList);
+    addAndMakeVisible(noiseList);
+
+    mainLabel.setJustificationType(juce::Justification::centredLeft);
+    mainLabel.setColour(juce::Label::textColourId,
+                        juce::Colour(0xffe0b46a));
+    addAndMakeVisible(mainLabel);
+
+    noiseLabel.setJustificationType(juce::Justification::centredLeft);
+    noiseLabel.setColour(juce::Label::textColourId,
+                         juce::Colour(0xffc6b18b));
+    addAndMakeVisible(noiseLabel);
+
+    mainList.onSampleTriggered = [this](const SampleEntry& e)
+    {
         auto file = audioProcessor.getSampleLibrary().resolveFilePath(e);
         audioProcessor.triggerSample(file.getFullPathName(), e.rootNote, 1.0f);
     };
 
-    // ADSR sliders
+    noiseList.onSampleTriggered = [this](const SampleEntry& e)
+    {
+        auto file = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        audioProcessor.triggerSample(file.getFullPathName(), e.rootNote, 0.8f);
+    };
+
+    // ADSR + filter + pitch controls
     setupSlider(attackSlider,  attackLabel,  "A");
     setupSlider(decaySlider,   decayLabel,   "D");
     setupSlider(sustainSlider, sustainLabel, "S");
@@ -100,43 +133,57 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(
     setupSlider(filterResSlider,    resLabel,    "Res");
     setupSlider(pitchSlider,        pitchLabel,  "Pitch");
 
+    // Noise + character macros
+    setupSlider(noiseLevelSlider, noiseLabelKnob, "Noise");
+    setupSlider(driftSlider,      driftLabel,     "Drift");
+    setupSlider(vhsSlider,        vhsLabel,       "VHS");
+    setupSlider(cassetteSlider,   cassetteLabel,  "Cass");
+
     addAndMakeVisible(filterTypeCombo);
     filterTypeCombo.addItem("Lowpass",  1);
     filterTypeCombo.addItem("Highpass", 2);
 
-    // APVTS attachments
+    // Attach to APVTS
     auto& apvts = audioProcessor.apvts;
-    attackAttach  = std::make_unique<SliderAttachment>(apvts, "attack",  attackSlider);
-    decayAttach   = std::make_unique<SliderAttachment>(apvts, "decay",   decaySlider);
-    sustainAttach = std::make_unique<SliderAttachment>(apvts, "sustain", sustainSlider);
-    releaseAttach = std::make_unique<SliderAttachment>(apvts, "release", releaseSlider);
-    cutoffAttach  = std::make_unique<SliderAttachment>(apvts, "filterCutoff", filterCutoffSlider);
-    resAttach     = std::make_unique<SliderAttachment>(apvts, "filterRes",    filterResSlider);
-    pitchAttach   = std::make_unique<SliderAttachment>(apvts, "pitchSemitones", pitchSlider);
+    attackAttach   = std::make_unique<SliderAttachment>(apvts, "attack",        attackSlider);
+    decayAttach    = std::make_unique<SliderAttachment>(apvts, "decay",         decaySlider);
+    sustainAttach  = std::make_unique<SliderAttachment>(apvts, "sustain",       sustainSlider);
+    releaseAttach  = std::make_unique<SliderAttachment>(apvts, "release",       releaseSlider);
+    cutoffAttach   = std::make_unique<SliderAttachment>(apvts, "filterCutoff",   filterCutoffSlider);
+    resAttach      = std::make_unique<SliderAttachment>(apvts, "filterRes",      filterResSlider);
+    pitchAttach    = std::make_unique<SliderAttachment>(apvts, "pitchSemitones", pitchSlider);
+
+    noiseLevelAttach = std::make_unique<SliderAttachment>(apvts, "noiseLevel",    noiseLevelSlider);
+    driftAttach      = std::make_unique<SliderAttachment>(apvts, "driftAmount",   driftSlider);
+    vhsAttach        = std::make_unique<SliderAttachment>(apvts, "vhsAmount",     vhsSlider);
+    cassetteAttach   = std::make_unique<SliderAttachment>(apvts, "cassetteAmount", cassetteSlider);
+
     filterTypeAttach = std::make_unique<ComboAttachment>(apvts, "filterType", filterTypeCombo);
 
-    refreshBrowser();
+    refreshBrowsers();
 }
 
 DustCrateAudioProcessorEditor::~DustCrateAudioProcessorEditor() {}
 
 void DustCrateAudioProcessorEditor::setupSlider(juce::Slider& s,
-                                                  juce::Label& l,
-                                                  const juce::String& text)
+                                                juce::Label& l,
+                                                const juce::String& text)
 {
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     s.setColour(juce::Slider::rotarySliderFillColourId,
-                juce::Colour(0xffb0803a));
+                juce::Colour(0xffe0b46a));
     addAndMakeVisible(s);
+
     l.setText(text, juce::dontSendNotification);
     l.setJustificationType(juce::Justification::centred);
     l.setFont(10.0f);
-    l.setColour(juce::Label::textColourId, juce::Colour(0xffb0a090));
+    l.setColour(juce::Label::textColourId,
+                juce::Colour(0xffc6b18b));
     addAndMakeVisible(l);
 }
 
-void DustCrateAudioProcessorEditor::refreshBrowser()
+void DustCrateAudioProcessorEditor::refreshBrowsers()
 {
     auto& lib = audioProcessor.getSampleLibrary();
     auto all  = lib.getAllSamples();
@@ -145,60 +192,85 @@ void DustCrateAudioProcessorEditor::refreshBrowser()
     juce::String packSel = packFilter.getText();
     juce::String search  = searchBox.getText().toLowerCase();
 
-    juce::Array<SampleEntry> filtered;
+    juce::Array<SampleEntry> mainEntries;
+    juce::Array<SampleEntry> noiseEntries;
+
     for (const auto& e : all)
     {
         bool catMatch  = catSel.isEmpty()  || catSel  == "All Categories" || e.category.equalsIgnoreCase(catSel);
         bool packMatch = packSel.isEmpty() || packSel == "All Packs"       || e.pack.equalsIgnoreCase(packSel);
         bool searchMatch = search.isEmpty() || e.name.toLowerCase().contains(search);
-        if (catMatch && packMatch && searchMatch)
-            filtered.add(e);
+
+        if (! catMatch || ! packMatch || ! searchMatch)
+            continue;
+
+        // Treat explicit "noise" category as vinyl/dust/noise candidates
+        if (e.category.equalsIgnoreCase("noise"))
+            noiseEntries.add(e);
+        else
+            mainEntries.add(e);
     }
-    sampleList.setEntries(filtered);
+
+    mainList.setEntries(mainEntries);
+    noiseList.setEntries(noiseEntries);
 }
 
 void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff121212));
-    g.setColour(juce::Colour(0xff2a2a2a));
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), 4.0f);
+    g.fillAll(juce::Colour(0xff101010));
 
-    // Title
-    g.setColour(juce::Colour(0xffb0803a)); // warm amber
-    g.setFont(juce::Font("Courier New", 16.0f, juce::Font::bold));
-    g.drawText("DUSTCRATE", 10, 8, 200, 24, juce::Justification::centredLeft);
-    g.setFont(9.0f);
-    g.setColour(juce::Colour(0xff606060));
-    g.drawText("digital crate digger", 10, 26, 200, 14,
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(0xff1b1b1b));
+    g.fillRoundedRectangle(bounds.reduced(4.0f), 6.0f);
+
+    g.setColour(juce::Colour(0xffe0b46a));
+    g.setFont(juce::Font("Courier New", 18.0f, juce::Font::bold));
+    g.drawText("DUSTCRATE", 12, 8, 200, 22, juce::Justification::centredLeft);
+    g.setFont(10.0f);
+    g.setColour(juce::Colour(0xff8a7a5a));
+    g.drawText("digital crate for MPC Sample", 12, 26, 260, 14,
                juce::Justification::centredLeft);
 }
 
 void DustCrateAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced(8);
+    auto area = getLocalBounds().reduced(10);
 
-    // Top bar
-    auto topBar = area.removeFromTop(32);
-    categoryFilter.setBounds(topBar.removeFromLeft(140).reduced(2));
-    packFilter    .setBounds(topBar.removeFromLeft(140).reduced(2));
-    searchBox     .setBounds(topBar.reduced(2));
+    // Top bar for filters/search
+    auto top = area.removeFromTop(32);
+    categoryFilter.setBounds(top.removeFromLeft(160).reduced(2));
+    packFilter.setBounds(top.removeFromLeft(160).reduced(2));
+    searchBox.setBounds(top.reduced(2));
 
-    // Browser list (60% of remaining height)
-    int browserH = static_cast<int>(area.getHeight() * 0.58f);
-    sampleList.setBounds(area.removeFromTop(browserH));
+    area.removeFromTop(6);
 
-    area.removeFromTop(6); // spacer
+    // Browsers occupy ~55% of remaining height
+    int browserHeight = int(area.getHeight() * 0.55f);
+    auto browserArea = area.removeFromTop(browserHeight);
 
-    // Control strip — 8 knobs in a row
-    auto controlStrip = area;
-    int knobW = controlStrip.getWidth() / 8;
-    int knobH = controlStrip.getHeight() - 16;
+    auto mainTitleRow  = browserArea.removeFromTop(18);
+    mainLabel.setBounds(mainTitleRow);
+
+    auto mainArea = browserArea.removeFromTop(browserArea.getHeight() / 2);
+    mainList.setBounds(mainArea.reduced(0, 2));
+
+    auto noiseTitleRow = browserArea.removeFromTop(18);
+    noiseLabel.setBounds(noiseTitleRow);
+    noiseList.setBounds(browserArea.reduced(0, 2));
+
+    area.removeFromTop(8);
+
+    // Bottom control strip – 4 ADSR, 2 filter, 1 pitch, 4 macros = 11 slots
+    auto controls = area;
+    int numSlots = 11;
+    int slotWidth = controls.getWidth() / numSlots;
 
     auto placeKnob = [&](juce::Slider& s, juce::Label& l)
     {
-        auto col = controlStrip.removeFromLeft(knobW);
-        l.setBounds(col.removeFromBottom(14));
-        s.setBounds(col);
+        auto col = controls.removeFromLeft(slotWidth);
+        auto labelArea = col.removeFromBottom(14);
+        l.setBounds(labelArea);
+        s.setBounds(col.reduced(4));
     };
 
     placeKnob(attackSlider,       attackLabel);
@@ -208,7 +280,11 @@ void DustCrateAudioProcessorEditor::resized()
     placeKnob(filterCutoffSlider, cutoffLabel);
     placeKnob(filterResSlider,    resLabel);
     placeKnob(pitchSlider,        pitchLabel);
+    placeKnob(noiseLevelSlider,   noiseLabelKnob);
+    placeKnob(driftSlider,        driftLabel);
+    placeKnob(vhsSlider,          vhsLabel);
+    placeKnob(cassetteSlider,     cassetteLabel);
 
-    // Filter type combo in last slot
-    filterTypeCombo.setBounds(controlStrip.reduced(4));
+    // Filter type combo sits over the last two knobs
+    filterTypeCombo.setBounds(controls.reduced(4));
 }
