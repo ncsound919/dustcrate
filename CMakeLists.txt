@@ -19,39 +19,45 @@ juce_add_plugin(DustCrate
 
 target_sources(DustCrate
     PRIVATE
-        Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp
-        Source/SampleLibrary.cpp
-        Source/SampleVoice.cpp
-        Source/CharacterProcessor.cpp
-        Source/WaveformDisplay.cpp
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/SampleLibrary.cpp
+    Source/SampleVoice.cpp
+    Source/CharacterProcessor.cpp
+    Source/WaveformDisplay.cpp
 )
 
 target_compile_definitions(DustCrate
     PUBLIC
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
 )
 
 target_link_libraries(DustCrate
     PRIVATE
-        juce::juce_audio_utils
-        juce::juce_audio_formats
-        juce::juce_audio_processors
-        juce::juce_gui_basics
-        juce::juce_gui_extra
-        juce::juce_dsp
+    juce::juce_audio_utils
+    juce::juce_audio_formats
+    juce::juce_audio_processors
+    juce::juce_gui_basics
+    juce::juce_gui_extra
+    juce::juce_dsp
     PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags
 )
 
+# Binary assets compiled into the plugin binary.
+# NOTE: Place VelumStroke.ttf in assets/fonts/ before building.
+#       Purchase a commercial license from:
+#       https://cikareotype.com/product/velum-stroke-natural-graffiti-tags-font/
 juce_add_binary_data(DustCrateAssets
     SOURCES
-        assets/samples/.gitkeep
-        packs/factory_pack.json
+    assets/samples/.gitkeep
+    packs/factory_pack.json
+    assets/fonts/VelumStroke.ttf
 )
+
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)
