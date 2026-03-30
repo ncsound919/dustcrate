@@ -50,14 +50,9 @@ target_link_libraries(DustCrate
 )
 
 # Binary assets compiled into the plugin binary.
-# NOTE: Place VelumStroke.ttf in assets/fonts/ before building.
-#       Purchase a commercial license from:
-#       https://cikareotype.com/product/velum-stroke-natural-graffiti-tags-font/
-juce_add_binary_data(DustCrateAssets
-    SOURCES
-    assets/samples/.gitkeep
-    packs/factory_pack.json
-    assets/fonts/VelumStroke.ttf
+    SOURCES# NOTE: Place BadMofo.ttf in assets/fonts/ before building.
+juce_add_binary_data(DustCrateAssets    packs/factory_pack.json
+    assets/fonts/BadMofo.ttf
 )
 
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)
