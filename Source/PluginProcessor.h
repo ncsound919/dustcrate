@@ -64,6 +64,9 @@ private:
     juce::Synthesiser synth;
     juce::AudioFormatManager formatManager;
 
+    // Protects access to synth and pendingMidi across audio/UI threads
+    juce::CriticalSection synthLock;
+
     juce::MidiBuffer pendingMidi;
 
     // Character effect LFO state
@@ -76,7 +79,8 @@ private:
     juce::Random rng;
 
     // Loads a sample file into every voice (enables true polyphony).
-    void selectSample(const juce::String& filePath, int rootNote);
+    // Returns true if at least one reader was successfully created.
+    bool selectSample(const juce::String& filePath, int rootNote);
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
