@@ -27,6 +27,8 @@ public:
     void setADSR(float attack, float decay, float sustain, float release);
     void setFilter(float cutoff, float resonance, bool isHighpass);
     void setPitchShift(float semitones);
+    // Called per-block so drift continuously modulates pitch while playing
+    void setDriftRatio(float ratio);
 
 private:
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
@@ -37,8 +39,11 @@ private:
     juce::ADSR::Parameters adsrParams;
 
     juce::dsp::StateVariableTPTFilter<float> filter;
-    double pitchRatio { 1.0 };
-    int rootMidiNote  { 60 };
+    double pitchRatio   { 1.0 };
+    double driftRatio   { 1.0 };
+    double cachedNoteRatio { 1.0 }; // set in startNote, reused per-block
+    float  velocityGain { 1.0f };
+    int    rootMidiNote { 60 };
 
     juce::AudioBuffer<float> tempBuffer;
 

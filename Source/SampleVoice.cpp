@@ -52,22 +52,26 @@ void SampleVoice::setPitchShift(float semitones)
     pitchRatio = std::pow(2.0, semitones / 12.0);
 }
 
+void SampleVoice::setDriftRatio(float ratio)
+{
+    driftRatio = static_cast<double>(ratio);
+}
+
 void SampleVoice::startNote(int midiNoteNumber, float velocity,
                              juce::SynthesiserSound*, int)
 {
-    // Calculate pitch ratio relative to root note
-    double noteDiff = midiNoteNumber - rootMidiNote;
-    double noteRatio = std::pow(2.0, noteDiff / 12.0);
-    resamplingSource.setResamplingRatio(noteRatio * pitchRatio);
+    velocityGain = velocity;
+
+    // Cache the note ratio; reused every block to avoid repeated std::pow
+    const double noteDiff = midiNoteNumber - rootMidiNote;
+    cachedNoteRatio = std::pow(2.0, noteDiff / 12.0);
+    resamplingSource.setResamplingRatio(cachedNoteRatio * pitchRatio * driftRatio);
 
     transportSource.setPosition(0.0);
     transportSource.start();
     adsr.setSampleRate(getSampleRate());
     adsr.setParameters(adsrParams);
     adsr.noteOn();
-
-    // Apply velocity scaling
-    (void)velocity; // store if you want velocity-sensitive amplitude
 }
 
 void SampleVoice::stopNote(float, bool allowTailOff)
@@ -91,6 +95,10 @@ void SampleVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         return;
     }
 
+    // Keep resampling ratio updated so drift modulates pitch while playing
+    if (getCurrentlyPlayingNote() >= 0)
+        resamplingSource.setResamplingRatio(cachedNoteRatio * pitchRatio * driftRatio);
+
     tempBuffer.setSize(2, numSamples, false, false, true);
     tempBuffer.clear();
 
@@ -105,11 +113,11 @@ void SampleVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
     juce::dsp::ProcessContextReplacing<float> ctx(block);
     filter.process(ctx);
 
-    // Mix into output
+    // Mix into output with velocity gain
     for (int ch = 0; ch < outputBuffer.getNumChannels(); ++ch)
         outputBuffer.addFrom(ch, startSample,
                              tempBuffer, ch % tempBuffer.getNumChannels(),
-                             0, numSamples);
+                             0, numSamples, velocityGain);
 
     if (!adsr.isActive())
     {
