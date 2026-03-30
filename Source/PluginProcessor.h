@@ -51,6 +51,7 @@ public:
     SampleLibrary& getSampleLibrary() { return sampleLibrary; }
 
     // Trigger a preview note from the UI (no external MIDI required)
+    // Loads the sample file into all voices then queues a MIDI note-on.
     void triggerSample(const juce::String& filePath, int midiNote, float velocity);
     void stopAllVoices();
 
@@ -64,6 +65,18 @@ private:
     juce::AudioFormatManager formatManager;
 
     juce::MidiBuffer pendingMidi;
+
+    // Character effect LFO state
+    double currentSampleRate { 44100.0 };
+    float driftPhase          { 0.0f };
+    float cassetteWowPhase    { 0.0f };
+    float cassetteFlutterPhase { 0.0f };
+
+    // Dedicated RNG for noise generation (avoids contention on the system RNG)
+    juce::Random rng;
+
+    // Loads a sample file into every voice (enables true polyphony).
+    void selectSample(const juce::String& filePath, int rootNote);
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

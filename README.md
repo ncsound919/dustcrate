@@ -128,12 +128,18 @@ All bundled sounds are CC0 or public domain, curated from:
 ## Build Roadmap
 
 - [x] Repo scaffold + architecture plan
-- [ ] CMakeLists.txt with JUCE targets (VST3 + Android)
-- [ ] Single-voice FLAC playback with ADSR
-- [ ] Polyphony (8 voices) + chromatic pitch mapping
-- [ ] Sample browser UI (list + category filter)
-- [ ] JSON pack/metadata system
-- [ ] Factory sound pack (50–100 CC0 sounds)
+- [x] CMakeLists.txt with JUCE targets (VST3 + AU + Standalone)
+- [x] Single-voice FLAC playback with ADSR
+- [x] Polyphony (16 voices) + chromatic pitch mapping
+- [x] Sample browser UI (dual list + category/pack filter + search)
+- [x] JSON pack/metadata system (binary-bundled factory pack)
+- [x] Factory sound pack (placeholder manifest — swap in CC0 FLAC files)
+- [x] APVTS parameter wiring (ADSR/filter/pitch applied to every voice per block)
+- [x] Velocity-sensitive voice amplitude
+- [x] Drift character effect (sinusoidal pitch LFO, continuous per-block)
+- [x] VHS character effect (tape saturation via tanh waveshaping)
+- [x] Cassette character effect (wow/flutter amplitude modulation + soft clip)
+- [x] Noise layer (white noise mix controlled by Noise knob)
 - [ ] Android APK build + latency testing
 - [ ] Release: v0.1.0 beta
 
