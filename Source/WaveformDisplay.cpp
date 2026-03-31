@@ -26,6 +26,46 @@ void WaveformDisplay::pushSamples(const float* data, int numSamples)
     writePos.store(wp, std::memory_order_release);
 }
 
+void WaveformDisplay::loadFile(const juce::File& file)
+{
+    // FIX: was missing — called from setupMpcKitCallbacks() to show static waveform.
+    // Reads the file on the message thread and fills displayBuffer directly,
+    // bypassing the ring buffer (no audio-thread involvement needed for static view).
+    if (! file.existsAsFile()) return;
+
+    juce::AudioFormatManager afm;
+    afm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (afm.createReaderFor (file));
+    if (reader == nullptr) return;
+
+    const int64 totalSamples = reader->lengthInSamples;
+    if (totalSamples <= 0) return;
+
+    // Read a decimated version into displayBuffer
+    const int64 stride = juce::jmax ((int64)1, totalSamples / (int64)kDisplaySize);
+    juce::AudioBuffer<float> tmp (1, (int)stride);
+
+    for (int i = 0; i < kDisplaySize; ++i)
+    {
+        const int64 startSample = (int64)i * stride;
+        if (startSample >= totalSamples)
+        {
+            displayBuffer[i] = 0.0f;
+            continue;
+        }
+        tmp.clear();
+        reader->read (&tmp, 0, (int)stride, startSample, true, true);
+        // Peak of this block
+        float pk = 0.0f;
+        const float* ch = tmp.getReadPointer (0);
+        for (int s = 0; s < (int)stride; ++s)
+            pk = juce::jmax (pk, std::abs (ch[s]));
+        displayBuffer[i] = pk;
+    }
+
+    repaint();
+}
+
 void WaveformDisplay::timerCallback()
 {
     // Snapshot the most recent kDisplaySize samples — message thread only
@@ -45,7 +85,7 @@ void WaveformDisplay::paint(juce::Graphics& g)
     g.setColour(gridColour);
     g.drawHorizontalLine((int)(b.getCentreY()), b.getX() + 2.0f, b.getRight() - 2.0f);
 
-    const float w  = b.getWidth() - 4.0f;
+    const float w  = b.getWidth()  - 4.0f;
     const float h  = b.getHeight() - 4.0f;
     const float cx = b.getX() + 2.0f;
     const float cy = b.getCentreY();
@@ -63,8 +103,7 @@ void WaveformDisplay::paint(juce::Graphics& g)
 
     g.setColour(waveColour.withAlpha(0.85f));
     g.strokePath(wave, juce::PathStrokeType(1.2f,
-                        juce::PathStrokeType::curved,
-                        juce::PathStrokeType::rounded));
+        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     g.setColour(juce::Colour(0xff2e3032));
     g.drawRoundedRectangle(b.reduced(0.5f), 3.0f, 0.8f);
