@@ -9,6 +9,8 @@
 //
 // FIX: displayBuffer size is now matched exactly to kDisplaySize so no
 // out-of-bounds access is possible even if kRingSize != kDisplaySize.
+// FIX: loadFile() added so SlicerPanel / MpcKitPanel can push static waveform
+//      data for display without going through the audio-thread ring buffer.
 //==============================================================================
 class WaveformDisplay : public juce::Component, private juce::Timer
 {
@@ -19,9 +21,14 @@ public:
     // Called from audio thread — lock-free
     void pushSamples(const float* data, int numSamples);
 
+    // Called from message thread — loads and displays a file's waveform
+    // (used by slicer / kit panel to show static preview).
+    // FIX: was missing — caused compile error in setupMpcKitCallbacks()
+    void loadFile(const juce::File& file);
+
     // Colours (set by editor)
     juce::Colour waveColour       { juce::Colours::orange };
-    juce::Colour backgroundColour { juce::Colours::black };
+    juce::Colour backgroundColour { juce::Colours::black  };
     juce::Colour gridColour       { juce::Colour(0xff252729) };
 
 private:
