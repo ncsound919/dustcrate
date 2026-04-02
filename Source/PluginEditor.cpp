@@ -1016,10 +1016,14 @@ void DustCrateAudioProcessorEditor::launchMpcExport()
         // Note: since exportKit() runs synchronously on the message thread,
         // JUCE will not repaint mid-export; this updates the label text so
         // the final state shows "100%" briefly before the result dialog appears.
-        juce::MessageManager::callAsync([this, p]()
+        juce::Component::SafePointer<DustCrateAudioProcessorEditor> safeThis (this);
+        juce::MessageManager::callAsync([safeThis, p]()
         {
-            kitNameLabel.setText("KIT NAME  " + juce::String((int)(p * 100)) + "%",
-                                  juce::dontSendNotification);
+            if (safeThis == nullptr)
+                return;
+
+            safeThis->kitNameLabel.setText("KIT NAME  " + juce::String((int)(p * 100)) + "%",
+                                           juce::dontSendNotification);
         });
     };
 
