@@ -953,9 +953,9 @@ void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
             currentRootNote = e.rootNote;
             audioProcessor.selectSample (currentFilePath, currentRootNote);
             samplePreview.previewFile (f, (float)previewTrimSlider.getValue());
+            slicerPanel.loadFile (juce::File (currentFilePath));
+            waveform.loadFile    (juce::File (currentFilePath));
         }
-        slicerPanel.loadFile (juce::File (currentFilePath));
-        waveform.loadFile    (juce::File (currentFilePath));
     };
 
     // Audition pad on double-click
