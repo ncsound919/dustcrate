@@ -198,9 +198,16 @@ void CharacterProcessor::processBlock(juce::AudioBuffer<float>& buffer)
         // the HF filter processes the buffer. Previously this copy was made
         // AFTER the HF filter, so the "warmth" being added back was already
         // high-frequency-attenuated content, not the original warm low end.
-        juce::AudioBuffer<float> lfBuf(numChannels, numSamples);
-        lfBuf.makeCopyOf(buffer);
+        // Use a reusable buffer to avoid per-callback heap allocation on the audio thread.
+        static thread_local juce::AudioBuffer<float> lfBuf;
 
+        // Ensure the scratch buffer is large enough; only grow it when necessary.
+        if (lfBuf.getNumChannels() < numChannels || lfBuf.getNumSamples() < numSamples)
+            lfBuf.setSize(numChannels, numSamples, false, false, true);
+
+        // Copy current buffer content into the scratch buffer (pre-HF-filter state).
+        for (int ch = 0; ch < numChannels; ++ch)
+            lfBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
         cassHFFilter.setCutoffFrequency(cassHFCutoff);
         {
             juce::dsp::AudioBlock<float> block(buffer);
