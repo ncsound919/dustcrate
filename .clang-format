@@ -1,0 +1,35 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+UseTab: Never
+
+# Brace style — keep opening braces on the same line (Attach)
+BreakBeforeBraces: Attach
+
+# Align trailing comments
+AlignTrailingComments: true
+
+# Short blocks / lambdas on one line
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLambdasOnASingleLine: Inline
+
+# Pointer alignment
+PointerAlignment: Left
+
+# Include sorting
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+
+# Constructor initialiser lists
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: Never
+
+# Namespace indentation
+NamespaceIndentation: None
+
+# Keep macro bodies formatted
+IndentPPDirectives: BeforeHash
+...

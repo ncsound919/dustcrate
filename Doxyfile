@@ -1,0 +1,45 @@
+# Doxyfile — DustCrate API documentation
+# Generate with: doxygen Doxyfile
+# Output goes to: docs/html/index.html
+
+PROJECT_NAME           = "DustCrate"
+PROJECT_NUMBER         = 0.1.0
+PROJECT_BRIEF          = "Digital crate-digger VST3/AU plugin"
+
+OUTPUT_DIRECTORY       = docs
+CREATE_SUBDIRS         = NO
+OUTPUT_LANGUAGE        = English
+
+# Input
+INPUT                  = Source
+FILE_PATTERNS          = *.h *.cpp
+RECURSIVE              = NO
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+# Formatting
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = NO
+MULTILINE_CPP_IS_BRIEF = NO
+TAB_SIZE               = 4
+
+# Output formats
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+
+# Graph / diagrams (requires Graphviz dot)
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+
+# Warnings
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARNINGS               = YES
+
+# Quiet output in CI
+QUIET                  = YES

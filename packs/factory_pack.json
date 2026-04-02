@@ -1,6 +1,7 @@
 {
   "packName": "Factory Pack",
   "version": "1.0",
+  "schema_version": 1,
   "samples": [
     {
       "name": "Vinyl Surface A",
