@@ -41,4 +41,8 @@ private:
                           const juce::Array<SampleEntry>& entries);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PackImportWizard)
+    // WeakReference support: allows lambdas to check if the wizard is still alive
+    // before dereferencing 'this', guarding against use-after-free when the editor
+    // is closed while an async file-chooser or AlertWindow is still pending.
+    JUCE_DECLARE_WEAK_REFERENCEABLE(PackImportWizard)
 };

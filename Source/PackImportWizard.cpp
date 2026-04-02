@@ -12,11 +12,19 @@ void PackImportWizard::launchImportDialog()
         "Import Sample Pack Folder",
         juce::File::getSpecialLocation(juce::File::userMusicDirectory));
 
+    // Capture a WeakReference so that if the wizard (and its owning editor) is
+    // destroyed before the async chooser callback fires, we bail out safely
+    // instead of dereferencing a dangling 'this'.
+    juce::WeakReference<PackImportWizard> weakThis (this);
+
     fileChooser->launchAsync(
         juce::FileBrowserComponent::openMode |
         juce::FileBrowserComponent::canSelectDirectories,
-        [this](const juce::FileChooser& fc)
+        [weakThis](const juce::FileChooser& fc)
         {
+            // Guard: wizard may have been destroyed while the chooser was open
+            if (weakThis == nullptr) return;
+
             const auto results = fc.getResults();
             if (results.isEmpty()) return;
 
@@ -33,8 +41,11 @@ void PackImportWizard::launchImportDialog()
             dialog->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
             dialog->enterModalState(true,
-                juce::ModalCallbackFunction::create([this, dialog, results](int result)
+                juce::ModalCallbackFunction::create([weakThis, dialog, results](int result)
                 {
+                    // Guard: wizard may have been destroyed while the dialog was open
+                    if (weakThis == nullptr) return;
+
                     if (result == 1)
                     {
                         const juce::String packName =
@@ -45,8 +56,9 @@ void PackImportWizard::launchImportDialog()
                         {
                             for (const auto& f : results)
                                 if (f.isDirectory())
-                                    importFolder(f, safeName);
-                            if (onPackImported) onPackImported(safeName);
+                                    weakThis->importFolder(f, safeName);
+                            if (weakThis->onPackImported)
+                                weakThis->onPackImported(safeName);
                         }
                     }
                 }), true);

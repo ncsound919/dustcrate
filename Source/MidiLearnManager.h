@@ -48,6 +48,13 @@ private:
     juce::Component::SafePointer<juce::Slider> pendingLearnSlider;
     bool learnMode { false };
 
+    // Protects 'sliders' and 'pendingLearnSlider' which are accessed from both
+    // the audio thread (processMidiBuffer) and the message thread (register,
+    // unregister, context menu callback).  The audio thread uses ScopedTryLock
+    // so it never blocks; if it cannot acquire the lock it skips that buffer.
+    // mutable so saveToState() (const) can still lock.
+    mutable juce::CriticalSection mappingLock;
+
     // Lock-free queue for audio-thread CC → message-thread param update.
     // Audio thread writes; message thread (flushCcQueue) reads and applies.
     static constexpr int kCcQueueSize = 64;
