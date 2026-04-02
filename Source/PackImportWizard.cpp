@@ -3,6 +3,70 @@
 PackImportWizard::PackImportWizard(SampleLibrary& lib)
     : library(lib) {}
 
+void PackImportWizard::launchImportDialog()
+{
+    // FIX: FileChooser must be heap-allocated (member variable) so it outlives
+    // the async callback. Stack-allocated choosers are destroyed before the
+    // callback fires in JUCE.
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Import Sample Pack Folder",
+        juce::File::getSpecialLocation(juce::File::userMusicDirectory));
+
+    // Capture a WeakReference so that if the wizard (and its owning editor) is
+    // destroyed before the async chooser callback fires, we bail out safely
+    // instead of dereferencing a dangling 'this'.
+    juce::WeakReference<PackImportWizard> weakThis (this);
+
+    fileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode |
+        juce::FileBrowserComponent::canSelectDirectories,
+        [weakThis](const juce::FileChooser& fc)
+        {
+            // Guard: wizard may have been destroyed while the chooser was open
+            if (weakThis == nullptr) return;
+
+            const auto results = fc.getResults();
+            if (results.isEmpty()) return;
+
+            // Prompt for a pack name using the first folder's name as default
+            const juce::String suggested = results.size() == 1
+                                         ? results[0].getFileName()
+                                         : "User Pack";
+
+            auto* dialog = new juce::AlertWindow("Import Pack",
+                                                  "Enter a name for this pack:",
+                                                  juce::MessageBoxIconType::NoIcon);
+            dialog->addTextEditor("packName", suggested, "");
+            dialog->addButton("Import", 1, juce::KeyPress(juce::KeyPress::returnKey));
+            dialog->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+            dialog->enterModalState(true,
+                juce::ModalCallbackFunction::create([weakThis, dialog, results](int result)
+                {
+                    // Guard: wizard may have been destroyed while the dialog was open
+                    if (weakThis == nullptr) return;
+
+                    if (result == 1)
+                    {
+                        const juce::String packName =
+                            dialog->getTextEditorContents("packName").trim();
+                        const juce::String safeName =
+                            packName.replaceCharacters("\\/:..", "_____");
+                        if (safeName.isNotEmpty())
+                        {
+                            for (const auto& f : results)
+                                if (f.isDirectory())
+                                    weakThis->importFolder(f, safeName);
+                            if (weakThis->onPackImported)
+                                weakThis->onPackImported(safeName);
+                        }
+                    }
+                }), true);
+        });
+}
+
+
+
 bool PackImportWizard::isInterestedInFileDrag(const juce::StringArray& files)
 {
     for (const auto& f : files)

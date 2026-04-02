@@ -632,6 +632,7 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
 
 DustCrateAudioProcessorEditor::~DustCrateAudioProcessorEditor()
 {
+    stopTimer();
     audioProcessor.onAudioBlock = nullptr;
 
     if (keyboardListener) keyboardState.removeListener(keyboardListener.get());
@@ -943,13 +944,18 @@ void DustCrateAudioProcessorEditor::switchTab (int index)
 void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
 {
     // Drag a sample from the browser onto a pad
-    mainList.onSampleSelected = [this](const SampleLibrary::Entry& e)
+    mainList.onSampleSelected = [this](const SampleEntry& e)
     {
-        currentFilePath = e.filePath;
-        currentRootNote = e.rootNote;
-        audioProcessor.selectSample (currentFilePath, currentRootNote);
-        slicerPanel.loadFile (juce::File (currentFilePath));
-        waveform.loadFile    (juce::File (currentFilePath));
+        const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
+        if (f.existsAsFile())
+        {
+            currentFilePath = f.getFullPathName();
+            currentRootNote = e.rootNote;
+            audioProcessor.selectSample (currentFilePath, currentRootNote);
+            samplePreview.previewFile (f, (float)previewTrimSlider.getValue());
+            slicerPanel.loadFile (juce::File (currentFilePath));
+            waveform.loadFile    (juce::File (currentFilePath));
+        }
     };
 
     // Audition pad on double-click
@@ -988,6 +994,12 @@ void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
     kitNameEditor.setInputRestrictions (32, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-");
 }
 
+void DustCrateAudioProcessorEditor::timerCallback()
+{
+    // Flush audio-thread MIDI CC changes to the APVTS safely on the message thread
+    audioProcessor.midiLearn.flushCcQueue(audioProcessor.apvts);
+}
+
 void DustCrateAudioProcessorEditor::launchMpcExport()
 {
     juce::FileChooser chooser ("Choose export folder (microSD root or staging folder)",
@@ -1000,9 +1012,18 @@ void DustCrateAudioProcessorEditor::launchMpcExport()
 
     mpcExportEngine.onProgress = [this](float p)
     {
-        juce::MessageManager::callAsync ([p]() {
-            // Progress could update a progress bar here
-            juce::ignoreUnused (p);
+        // Update the kit name label to show export progress percentage.
+        // Note: since exportKit() runs synchronously on the message thread,
+        // JUCE will not repaint mid-export; this updates the label text so
+        // the final state shows "100%" briefly before the result dialog appears.
+        juce::Component::SafePointer<DustCrateAudioProcessorEditor> safeThis (this);
+        juce::MessageManager::callAsync([safeThis, p]()
+        {
+            if (safeThis == nullptr)
+                return;
+
+            safeThis->kitNameLabel.setText("KIT NAME  " + juce::String((int)(p * 100)) + "%",
+                                           juce::dontSendNotification);
         });
     };
 
@@ -1059,8 +1080,14 @@ void DustCrateAudioProcessorEditor::setupSlicerCallbacks()
 
     slicerPanel.onMarkerClicked = [this](int samplePos)
     {
-        // Play from the marker position by previewing
-        juce::ignoreUnused (samplePos);
+        // Seek to marker position and preview from there
+        if (currentFilePath.isEmpty()) return;
+        const juce::File f (currentFilePath);
+        if (! f.existsAsFile()) return;
+        const double sr = slicerPanel.getSampleRate();
+        if (sr <= 0.0) return;
+        const double posSeconds = (double)samplePos / sr;
+        samplePreview.previewFrom (f, posSeconds, (float)previewTrimSlider.getValue());
     };
 
     // Even-slice count options: 2, 4, 8, 16, 32
@@ -1131,4 +1158,7 @@ void DustCrateAudioProcessorEditor::initMpcPanels()
 
     // Start on browser tab
     switchTab (0);
+
+    // Start timer to flush MIDI-learn CC queue to APVTS on message thread
+    startTimerHz(30);
 }

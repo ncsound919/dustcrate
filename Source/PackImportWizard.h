@@ -24,10 +24,16 @@ public:
     void filesDropped           (const juce::StringArray& files,
                                   int x, int y)                  override;
 
+    // Called from File menu → "Import Pack..." — opens a folder chooser
+    void launchImportDialog ();
+
     std::function<void(const juce::String& packName)> onPackImported;
 
 private:
     SampleLibrary& library;
+
+    // FIX: FileChooser must be a member (heap lifetime) for async callbacks
+    std::unique_ptr<juce::FileChooser> fileChooser;
 
     void importFolder (const juce::File& folder, const juce::String& packName);
     void saveSidecarJSON (const juce::File& folder,
@@ -35,4 +41,8 @@ private:
                           const juce::Array<SampleEntry>& entries);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PackImportWizard)
+    // WeakReference support: allows lambdas to check if the wizard is still alive
+    // before dereferencing 'this', guarding against use-after-free when the editor
+    // is closed while an async file-chooser or AlertWindow is still pending.
+    JUCE_DECLARE_WEAK_REFERENCEABLE(PackImportWizard)
 };

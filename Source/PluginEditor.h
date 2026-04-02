@@ -63,20 +63,20 @@ class SampleBrowserList : public juce::Component, public juce::ListBoxModel
 {
 public:
     SampleBrowserList(DustCrateAudioProcessor&, DustCrateLookAndFeel&);
-    void setEntries(const juce::Array<SampleLibrary::Entry>&);
+    void setEntries(const juce::Array<SampleEntry>&);
     int  getNumRows() override;
     void paintListBoxItem(int,juce::Graphics&,int,int,bool) override;
     void listBoxItemClicked(int,const juce::MouseEvent&) override;
     void listBoxItemDoubleClicked(int,const juce::MouseEvent&) override;
     void resized() override;
-    std::function<void(const SampleLibrary::Entry&)> onSampleSelected;
-    std::function<void(const SampleLibrary::Entry&)> onSampleTriggered;
+    std::function<void(const SampleEntry&)> onSampleSelected;
+    std::function<void(const SampleEntry&)> onSampleTriggered;
     int selectedRow { -1 };
 private:
     DustCrateAudioProcessor& processor;
     DustCrateLookAndFeel& laf;
     juce::ListBox listBox { "browser", this };
-    juce::Array<SampleLibrary::Entry> entries;
+    juce::Array<SampleEntry> entries;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SampleBrowserList)
 };
 
@@ -111,7 +111,8 @@ private:
 //==============================================================================
 class DustCrateAudioProcessorEditor : public juce::AudioProcessorEditor,
                                       public juce::FileDragAndDropTarget,
-                                      public juce::DragAndDropContainer
+                                      public juce::DragAndDropContainer,
+                                      private juce::Timer
 {
 public:
     explicit DustCrateAudioProcessorEditor(DustCrateAudioProcessor&);
@@ -255,6 +256,8 @@ private:
     void setupMpcKitCallbacks();
     void setupSlicerCallbacks();
     void launchMpcExport();
+    // Timer: flush MIDI-learn CC queue from audio thread → apvts on message thread
+    void timerCallback() override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DustCrateAudioProcessorEditor)
 };

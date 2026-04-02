@@ -44,7 +44,7 @@ public:
     SampleLibrary& getSampleLibrary() { return sampleLibrary; }
 
     // FIX: selectSample is public so editor + MPC panels can call it directly
-    bool selectSample (const juce::String& filePath, int rootNote);
+    [[nodiscard]] bool selectSample (const juce::String& filePath, int rootNote);
 
     void triggerSample (const juce::String& filePath, int midiNote, float velocity);
     void stopAllVoices ();

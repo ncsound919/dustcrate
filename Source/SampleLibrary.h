@@ -34,7 +34,7 @@ public:
     juce::StringArray         getSubcategories (const juce::String& category) const;
     juce::StringArray         getPacks         () const;
 
-    juce::File resolveFilePath (const SampleEntry&) const;
+    [[nodiscard]] juce::File resolveFilePath (const SampleEntry&) const;
     void setAssetsRoot (const juce::File& root) { assetsRoot = root; }
 
 private:

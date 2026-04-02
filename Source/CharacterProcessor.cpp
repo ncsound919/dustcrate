@@ -66,14 +66,15 @@ void CharacterProcessor::setNoise    (float v) { noiseAmount    = juce::jlimit(0
 //==============================================================================
 float CharacterProcessor::readDelay(const float* buf, int writeHead, float delaySamples) const
 {
-    // FIX: ensure rd is positive before truncation so modulo always gives valid index
+    // FIX: use fmodf instead of a while-loop to avoid hangs when delaySamples
+    // is large. Adding kDriftDelayLen*2 ensures the result is positive before
+    // taking the modulo (writeHead < kDriftDelayLen, delaySamples <= kDriftDelayLen-2).
     float rd = (float)writeHead - delaySamples;
-    // Bring into positive range before floor
-    while (rd < 0.0f) rd += (float)kDriftDelayLen;
-    int ri   = (int)rd;
+    rd = fmodf(rd + (float)(kDriftDelayLen * 2), (float)kDriftDelayLen);
+    int ri    = (int)rd;
     float frac = rd - (float)ri;
-    ri   = ri % kDriftDelayLen;
-    int ri1  = (ri + 1) % kDriftDelayLen;
+    ri    = ri % kDriftDelayLen; // clamp in case of floating-point edge case
+    int ri1   = (ri + 1) % kDriftDelayLen;
     return buf[ri] * (1.0f - frac) + buf[ri1] * frac;
 }
 
@@ -89,8 +90,10 @@ void CharacterProcessor::processBlock(juce::AudioBuffer<float>& buffer)
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
-    // FIX: guard zero-sample and mono; for mono, mirror processing to ch0 only
-    if (numSamples <= 0) return;
+    jassert(numChannels > 0);
+    jassert(numSamples > 0);
+    // Guard zero-sample and degenerate buffers
+    if (numSamples <= 0 || numChannels <= 0) return;
 
     // FIX: mono-safe — work on ch0 only, ch1 mirrors ch0 if stereo
     const bool stereo = (numChannels >= 2);
@@ -190,15 +193,28 @@ void CharacterProcessor::processBlock(juce::AudioBuffer<float>& buffer)
     if (cassetteAmount > 0.001f)
     {
         const float cassHFCutoff = juce::jmax(100.0f, 14000.0f - cassetteAmount * 6000.0f);
+
+        // FIX: capture pre-HF-filter content for the LF warmth blend BEFORE
+        // the HF filter processes the buffer. Previously this copy was made
+        // AFTER the HF filter, so the "warmth" being added back was already
+        // high-frequency-attenuated content, not the original warm low end.
+        // Use a reusable buffer to avoid per-callback heap allocation on the audio thread.
+        static thread_local juce::AudioBuffer<float> lfBuf;
+
+        // Ensure the scratch buffer is large enough; only grow it when necessary.
+        if (lfBuf.getNumChannels() < numChannels || lfBuf.getNumSamples() < numSamples)
+            lfBuf.setSize(numChannels, numSamples, false, false, true);
+
+        // Copy current buffer content into the scratch buffer (pre-HF-filter state).
+        for (int ch = 0; ch < numChannels; ++ch)
+            lfBuf.copyFrom(ch, 0, buffer, ch, 0, numSamples);
         cassHFFilter.setCutoffFrequency(cassHFCutoff);
         {
             juce::dsp::AudioBlock<float> block(buffer);
             juce::dsp::ProcessContextReplacing<float> ctx(block);
             cassHFFilter.process(ctx);
         }
-        // Parallel LF warmth blend
-        juce::AudioBuffer<float> lfBuf(numChannels, numSamples);
-        lfBuf.makeCopyOf(buffer);
+        // Parallel LF warmth blend from the original (pre-HF) copy
         {
             juce::dsp::AudioBlock<float> lfBlock(lfBuf);
             juce::dsp::ProcessContextReplacing<float> lfCtx(lfBlock);

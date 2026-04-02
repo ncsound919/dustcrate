@@ -4,9 +4,13 @@ SampleLibrary::SampleLibrary() {}
 
 void SampleLibrary::loadPackFromJSON(const juce::File& f)
 {
+    // Guard: verify file exists before parsing
+    if (! f.existsAsFile()) return;
     juce::var json;
-    if (juce::JSON::parse(f.loadFileAsString(), json).wasOk())
+    const auto result = juce::JSON::parse(f.loadFileAsString(), json);
+    if (result.wasOk())
         parseJSON(json);
+    // Silently ignore malformed JSON — don't crash or assert
 }
 
 void SampleLibrary::loadPackFromBinaryData(const char* data, int size)
@@ -18,10 +22,15 @@ void SampleLibrary::loadPackFromBinaryData(const char* data, int size)
 
 void SampleLibrary::parseJSON(const juce::var& json)
 {
+    // Guard: json must be an object with a "samples" array
+    if (! json.isObject()) return;
+    const juce::var& samplesVar = json["samples"];
+    if (! samplesVar.isArray()) return;
     const juce::String packName = json["packName"].toString();
-    const auto& arr = *json["samples"].getArray();
+    const auto& arr = *samplesVar.getArray();
     for (const auto& item : arr)
     {
+        if (! item.isObject()) continue;
         SampleEntry e;
         e.name        = item["name"].toString();
         e.filePath    = item["filePath"].toString();
@@ -150,9 +159,33 @@ juce::StringArray SampleLibrary::getPacks() const
 
 juce::File SampleLibrary::resolveFilePath(const SampleEntry& e) const
 {
-    // Absolute paths (user-scanned files) resolve directly
     const juce::File direct(e.filePath);
-    if (direct.isAbsolute() && direct.existsAsFile()) return direct;
-    // Relative paths resolve under assetsRoot
-    return assetsRoot.getChildFile(e.filePath);
+
+    if (direct.isAbsolute())
+    {
+        // Security: if assetsRoot is set, reject absolute paths that escape it.
+        // User-scanned entries always use absolute paths but are legitimate;
+        // JSON-sourced entries should never require absolute paths outside assets.
+        // We guard by checking child-of-root when assetsRoot is set.
+        if (assetsRoot.isDirectory() && ! direct.isAChildOf(assetsRoot))
+        {
+            // Absolute path outside assetsRoot — only allow if the file is
+            // a user-scanned entry (license == "User"). JSON packs must use
+            // relative paths inside assetsRoot.
+            if (e.license != "User")
+                return juce::File(); // path traversal attempt from JSON pack
+        }
+        if (direct.existsAsFile()) return direct;
+        return juce::File(); // absolute but not found — don't fall through to relative resolve
+    }
+
+    // Relative path — resolve under assetsRoot
+    if (! assetsRoot.isDirectory()) return juce::File();
+    const juce::File resolved = assetsRoot.getChildFile(e.filePath);
+
+    // Security: verify the resolved path doesn't escape assetsRoot via ".." sequences.
+    // juce::File::isAChildOf() performs a canonical path comparison.
+    if (! resolved.isAChildOf(assetsRoot) && resolved != assetsRoot)
+        return juce::File();
+    return resolved;
 }

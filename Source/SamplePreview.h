@@ -21,6 +21,8 @@ public:
     void initialise (juce::AudioDeviceManager* externalManager = nullptr);
 
     void previewFile (const juce::File& file, float trimGain = 0.75f);
+    // Preview from a specific position (seconds) — used by slicer marker playback
+    void previewFrom (const juce::File& file, double positionSeconds, float trimGain = 0.75f);
     void stop        ();
 
     bool isPlaying() const { return playing.load(); }

@@ -20,9 +20,9 @@ public:
     explicit PresetManager(juce::AudioProcessorValueTreeState& apvts);
 
     //--- Save / Load -------------------------------------------------------
-    bool savePreset   (const juce::String& name, const juce::String& category = "User");
-    bool loadPreset   (const juce::String& name);
-    bool deletePreset (const juce::String& name);
+    [[nodiscard]] bool savePreset   (const juce::String& name, const juce::String& category = "User");
+    [[nodiscard]] bool loadPreset   (const juce::String& name);
+    [[nodiscard]] bool deletePreset (const juce::String& name);
 
     //--- Discovery ---------------------------------------------------------
     void            refreshPresetList();

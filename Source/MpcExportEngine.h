@@ -36,12 +36,12 @@ public:
     // Export a full kit to the given root folder.
     // kitName   : e.g. "MyKit" -> becomes folder and file prefix
     // outputRoot: top-level folder (e.g. the microSD root or a staging folder)
-    MpcExportResult exportKit (const MpcKitPanel& kit,
+    [[nodiscard]] MpcExportResult exportKit (const MpcKitPanel& kit,
                                const juce::String& kitName,
                                const juce::File&   outputRoot);
 
     // Export only a single pad slot
-    MpcExportResult exportPad (const MpcPadSlot& pad,
+    [[nodiscard]] MpcExportResult exportPad (const MpcPadSlot& pad,
                                const juce::String& kitName,
                                int                 padIndex,
                                const juce::File&   samplesFolder);
