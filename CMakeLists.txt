@@ -25,10 +25,16 @@ target_sources(DustCrate
     Source/SampleVoice.cpp
     Source/CharacterProcessor.cpp
     Source/WaveformDisplay.cpp
-        Source/MpcKitPanel.cpp
-        Source/MpcExportEngine.cpp
-        Source/SlicerPanel.cpp
-        Source/MidiOutputPanel.cpp
+    Source/MpcKitPanel.cpp
+    Source/MpcExportEngine.cpp
+    Source/SlicerPanel.cpp
+    Source/MidiOutputPanel.cpp
+    Source/MidiLearnManager.cpp
+    Source/PresetBrowserBar.cpp
+    Source/PresetManager.cpp
+    Source/SamplePreview.cpp
+    Source/PackImportWizard.cpp
+    Source/MacroLFO.cpp
 )
 
 target_compile_definitions(DustCrate
@@ -54,9 +60,11 @@ target_link_libraries(DustCrate
 )
 
 # Binary assets compiled into the plugin binary.
-    SOURCES# NOTE: Place BadMofo.ttf in assets/fonts/ before building.
-juce_add_binary_data(DustCrateAssets    packs/factory_pack.json
-    assets/fonts/BadMofo.ttf
+# NOTE: SedgwickAveDisplay-Regular.ttf is included for optional display use.
+juce_add_binary_data(DustCrateAssets
+    SOURCES
+    packs/factory_pack.json
+    assets/fonts/SedgwickAveDisplay-Regular.ttf
 )
 
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)

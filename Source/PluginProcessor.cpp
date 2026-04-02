@@ -61,6 +61,10 @@ void DustCrateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                             juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    // Defensive guards — hosts should never violate these, but be explicit
+    jassert(buffer.getNumChannels() > 0);
+    jassert(buffer.getNumSamples() > 0);
+    if (buffer.getNumSamples() <= 0) return;
     buffer.clear();
 
     // BPM from DAW
@@ -153,7 +157,12 @@ void DustCrateAudioProcessor::triggerSample(const juce::String& path, int note, 
 {
     if (! selectSample(path, note)) return;
     const juce::ScopedLock sl(synthLock);
-    pendingMidi.addEvent(juce::MidiMessage::noteOn(1, note, vel), 0);
+    // FIX: add a corresponding noteOff immediately after noteOn so the voice
+    // enters release rather than holding indefinitely (one-shot behaviour).
+    // The note is queued at sample position 0; noteOff at position 1 so the
+    // ADSR starts attack before the release is triggered.
+    pendingMidi.addEvent(juce::MidiMessage::noteOn (1, note, vel), 0);
+    pendingMidi.addEvent(juce::MidiMessage::noteOff(1, note, 0.0f), 1);
 }
 
 void DustCrateAudioProcessor::stopAllVoices()
@@ -207,7 +216,10 @@ void DustCrateAudioProcessor::setStateInformation(const void* data, int size)
     if (! tree.isValid() || ! tree.hasType(apvts.state.getType())) return;
     const auto extra = tree.getChildWithName("Extra");
     if (extra.isValid()) midiLearn.loadFromState(extra);
-    // FIX: only remove the Extra child we added — not ALL children
+    // Remove the Extra child we added in getStateInformation().
+    // If the preset was saved without an "Extra" child (older preset format),
+    // getChildWithName() returns an invalid ValueTree and removeChild() is a
+    // safe no-op — no crash, no data loss.
     tree.removeChild(tree.getChildWithName("Extra"), nullptr);
     apvts.replaceState(tree);
 }

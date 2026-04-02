@@ -174,10 +174,23 @@ void MpcExportEngine::resampleIfNeeded (juce::AudioBuffer<float>& buf,
 juce::String MpcExportEngine::buildXpmProgram (const MpcKitPanel& kit,
                                                const juce::String& kitName)
 {
+    // FIX: XML-escape all user-provided strings so characters like <, >, &, ', "
+    // in kit names or sample names don't produce malformed XPM XML.
+    auto xmlEscape = [](const juce::String& s) -> juce::String
+    {
+        return s.replace("&",  "&amp;")
+                .replace("<",  "&lt;")
+                .replace(">",  "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'",  "&apos;");
+    };
+
+    const juce::String safeKitName = xmlEscape(kitName);
+
     juce::String xml;
     xml << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     xml << "<MPCVObject version=\"2.1\" type=\"Program\">\n";
-    xml << "  <Program name=\"" << kitName << "\" type=\"Drum\">\n";
+    xml << "  <Program name=\"" << safeKitName << "\" type=\"Drum\">\n";
     xml << "    <Pads>\n";
 
     for (int i = 0; i < MpcKitPanel::kNumPads; ++i)
@@ -185,16 +198,17 @@ juce::String MpcExportEngine::buildXpmProgram (const MpcKitPanel& kit,
         const auto& pad = kit.getPad (i);
         auto noteName = juce::MidiMessage::getMidiNoteName (pad.rootNote, true, true, 4)
                             .replaceCharacter ('#', 's');
-        auto fileName = pad.occupied
+        auto rawFileName = pad.occupied
             ? kitName + "_" + MpcKitPanel::padLabel(i) + "_" + noteName + ".wav"
             : juce::String();
+        const juce::String safeFileName = xmlEscape(rawFileName);
 
         xml << "      <Pad index=\"" << i << "\""
             << " note=\"" << pad.rootNote << "\""
             << " bank=\"A\""
-            << " label=\"" << MpcKitPanel::padLabel(i) << "\">\n";
+            << " label=\"" << xmlEscape(MpcKitPanel::padLabel(i)) << "\">\n";
         if (pad.occupied)
-            xml << "        <Layer file=\"" << fileName << "\" level=\"100\"/>\n";
+            xml << "        <Layer file=\"" << safeFileName << "\" level=\"100\"/>\n";
         xml << "      </Pad>\n";
     }
 

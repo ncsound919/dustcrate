@@ -87,15 +87,20 @@ void SampleVoice::setADSR(float a, float d, float s, float r)
     recomputeIncrements();
 }
 
-void SampleVoice::setFilter(float cutoff, float resonance, bool hp)
+void SampleVoice::setFilter(float cutoff, float resonance, bool /*hp*/)
 {
     filterCutoff  = juce::jlimit(20.0f, 20000.0f, cutoff);
     filterRes     = juce::jmax(0.1f, resonance);
-    filterTypeIdx = hp ? 1 : 0;
+    // FIX: do NOT overwrite filterTypeIdx here — setFilterType() is called
+    // first by updateVoiceParameters() and already handles LP/HP/BP correctly.
+    // The 'hp' bool cannot represent bandpass, so using it to override
+    // filterTypeIdx would clear any bandpass selection.
     filter.setCutoffFrequency(filterCutoff);
     filter.setResonance(filterRes);
     using T = juce::dsp::StateVariableTPTFilter<float>::Type;
-    filter.setType(hp ? T::highpass : T::lowpass);
+    filter.setType(filterTypeIdx == 1 ? T::highpass
+                 : filterTypeIdx == 2 ? T::bandpass
+                 :                      T::lowpass);
 }
 
 void SampleVoice::setFilterType(int idx)
@@ -213,7 +218,10 @@ void SampleVoice::renderNextBlock(juce::AudioBuffer<float>& output,
                        tempBuffer, ch % tempBuffer.getNumChannels(),
                        0, numSamples, velocityGain);
 
-    // FIX: clear voice after ADSR completes — use the Synthesiser-safe path
+    // If ADSR reaches Idle mid-block (during the sample loop above), the second
+    // check below will catch it and call clearCurrentNote(). This is the correct
+    // path: clearCurrentNote() must be called from within renderNextBlock(), not
+    // from stopNote(), to satisfy JUCE's voice-management invariants.
     if (adsrStage == AdsrStage::Idle)
     {
         transportSource.stop();

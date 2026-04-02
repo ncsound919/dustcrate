@@ -22,6 +22,17 @@ public:
     void saveToState     (juce::ValueTree& extraState) const;
     void loadFromState   (const juce::ValueTree& extraState);
 
+    // Toggle global MIDI-learn arm — next incoming CC binds to any active slider
+    void toggleLearnMode ();
+    bool isLearnMode     () const { return learnMode; }
+
+    // Clear all CC assignments for all registered sliders
+    void clearAll ();
+
+    // Flush queued CC changes to the APVTS — call this on the message thread
+    // (e.g. from a juce::Timer or juce::AsyncUpdater in the editor).
+    void flushCcQueue (juce::AudioProcessorValueTreeState& ap);
+
 private:
     juce::AudioProcessorValueTreeState& apvts;
 
@@ -35,6 +46,14 @@ private:
     juce::Array<SliderInfo> sliders;
     // FIX: use ComponentSafePointer to guard against dangling learn pointer
     juce::Component::SafePointer<juce::Slider> pendingLearnSlider;
+    bool learnMode { false };
+
+    // Lock-free queue for audio-thread CC → message-thread param update.
+    // Audio thread writes; message thread (flushCcQueue) reads and applies.
+    static constexpr int kCcQueueSize = 64;
+    struct CcEvent { int cc { -1 }; float value { 0.0f }; };
+    juce::AbstractFifo           ccFifo { kCcQueueSize };
+    std::array<CcEvent, kCcQueueSize> ccQueue;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiLearnManager)
 };

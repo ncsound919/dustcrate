@@ -24,10 +24,16 @@ public:
     void filesDropped           (const juce::StringArray& files,
                                   int x, int y)                  override;
 
+    // Called from File menu → "Import Pack..." — opens a folder chooser
+    void launchImportDialog ();
+
     std::function<void(const juce::String& packName)> onPackImported;
 
 private:
     SampleLibrary& library;
+
+    // FIX: FileChooser must be a member (heap lifetime) for async callbacks
+    std::unique_ptr<juce::FileChooser> fileChooser;
 
     void importFolder (const juce::File& folder, const juce::String& packName);
     void saveSidecarJSON (const juce::File& folder,

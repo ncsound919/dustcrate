@@ -22,6 +22,7 @@ void MidiLearnManager::unregisterSlider(juce::Slider* slider)
 bool MidiLearnManager::processMidiBuffer(const juce::MidiBuffer& midi,
                                           juce::AudioProcessorValueTreeState& ap)
 {
+    juce::ignoreUnused(ap); // CC values are applied on the message thread via flushCcQueue()
     bool updated = false;
     for (const auto meta : midi)
     {
@@ -38,12 +39,65 @@ bool MidiLearnManager::processMidiBuffer(const juce::MidiBuffer& midi,
             pendingLearnSlider = nullptr;
         }
 
-        for (auto& si : sliders)
-            if (si.learnedCC == cc)
-                if (auto* param = ap.getParameter(si.paramID))
-                { param->setValueNotifyingHost(v); updated = true; }
+        // Check if any slider is mapped to this CC
+        bool anyMapped = false;
+        for (const auto& si : sliders)
+            if (si.learnedCC == cc) { anyMapped = true; break; }
+
+        if (anyMapped)
+        {
+            // FIX: do NOT call setValueNotifyingHost from audio thread.
+            // Push to lock-free queue; flushCcQueue() applies on message thread.
+            int s1, n1, s2, n2;
+            ccFifo.prepareToWrite(1, s1, n1, s2, n2);
+            if (n1 > 0) ccQueue[(size_t)s1] = { cc, v };
+            else if (n2 > 0) ccQueue[(size_t)s2] = { cc, v };
+            ccFifo.finishedWrite(n1 > 0 ? 1 : (n2 > 0 ? 1 : 0));
+            updated = true;
+        }
     }
     return updated;
+}
+
+void MidiLearnManager::flushCcQueue(juce::AudioProcessorValueTreeState& ap)
+{
+    // Called on the message thread — safe to call setValueNotifyingHost here
+    int s1, n1, s2, n2;
+    const int numReady = ccFifo.getNumReady();
+    if (numReady == 0) return;
+    ccFifo.prepareToRead(numReady, s1, n1, s2, n2);
+
+    auto apply = [&](int start, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& ev = ccQueue[(size_t)(start + i)];
+            for (const auto& si : sliders)
+                if (si.learnedCC == ev.cc)
+                    if (auto* param = ap.getParameter(si.paramID))
+                        param->setValueNotifyingHost(ev.value);
+        }
+    };
+    apply(s1, n1);
+    apply(s2, n2);
+    ccFifo.finishedRead(n1 + n2);
+}
+
+void MidiLearnManager::toggleLearnMode()
+{
+    learnMode = !learnMode;
+    if (! learnMode)
+        pendingLearnSlider = nullptr; // cancel any pending per-slider learn
+}
+
+void MidiLearnManager::clearAll()
+{
+    for (auto& si : sliders)
+        si.learnedCC = -1;
+    // Also drain the CC queue to avoid stale events
+    int s1, n1, s2, n2;
+    ccFifo.prepareToRead(ccFifo.getNumReady(), s1, n1, s2, n2);
+    ccFifo.finishedRead(n1 + n2);
 }
 
 void MidiLearnManager::showContextMenu(juce::Slider* slider)

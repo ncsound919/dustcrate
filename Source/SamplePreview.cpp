@@ -57,7 +57,32 @@ void SamplePreview::previewFile(const juce::File& file, float trimGain)
     playing.store(true);
 }
 
-void SamplePreview::stop()
+void SamplePreview::previewFrom (const juce::File& file, double positionSeconds, float trimGain)
+{
+    if (activeManager == nullptr) return;
+    if (! file.existsAsFile()) return;
+    stop();
+    trim = juce::jlimit (0.0f, 1.0f, trimGain);
+
+    auto* reader = formatManager.createReaderFor (file);
+    if (reader == nullptr) return;
+
+    const double effectiveSR = (deviceSR > 0.0) ? deviceSR : 44100.0;
+
+    const juce::ScopedLock sl (lock);
+    readerSource     = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
+    resamplingSource = std::make_unique<juce::ResamplingAudioSource> (readerSource.get(), false, 2);
+    resamplingSource->prepareToPlay (512, effectiveSR);
+    transportSource.prepareToPlay (512, effectiveSR);
+    transportSource.setSource (resamplingSource.get(), 0, nullptr, reader->sampleRate);
+    resamplingSource->setResamplingRatio (reader->sampleRate / effectiveSR);
+    // Clamp to valid range — ignore negative/out-of-bounds positions
+    const double clampedPos = juce::jlimit (0.0, transportSource.getLengthInSeconds(), positionSeconds);
+    transportSource.setPosition (clampedPos);
+    transportSource.start();
+    playing.store (true);
+}
+
 {
     const juce::ScopedLock sl(lock);
     transportSource.stop();
