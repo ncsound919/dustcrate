@@ -1,23 +1,37 @@
 #include "SampleLibrary.h"
+#include "PresetValidator.h"
 
 SampleLibrary::SampleLibrary() {}
 
 void SampleLibrary::loadPackFromJSON(const juce::File& f)
 {
-    // Guard: verify file exists before parsing
     if (! f.existsAsFile()) return;
     juce::var json;
     const auto result = juce::JSON::parse(f.loadFileAsString(), json);
-    if (result.wasOk())
-        parseJSON(json);
-    // Silently ignore malformed JSON — don't crash or assert
+    if (! result.wasOk()) return;
+
+    const auto validation = PresetValidator::validatePackJson(json);
+    if (! validation.ok)
+    {
+        DBG("SampleLibrary: pack validation failed for " + f.getFullPathName()
+            + " — " + validation.errorMessage);
+        return;
+    }
+    parseJSON(json);
 }
 
 void SampleLibrary::loadPackFromBinaryData(const char* data, int size)
 {
     juce::var json;
-    if (juce::JSON::parse(juce::String::fromUTF8(data, size), json).wasOk())
-        parseJSON(json);
+    if (! juce::JSON::parse(juce::String::fromUTF8(data, size), json).wasOk()) return;
+
+    const auto validation = PresetValidator::validatePackJson(json);
+    if (! validation.ok)
+    {
+        DBG("SampleLibrary: built-in pack validation failed — " + validation.errorMessage);
+        return;
+    }
+    parseJSON(json);
 }
 
 void SampleLibrary::parseJSON(const juce::var& json)
@@ -71,6 +85,18 @@ void SampleLibrary::scanUserFolder(const juce::File& folder,
 {
     if (! folder.isDirectory()) return;
     const juce::String folderName = folder.getFileName();
+    const juce::int64  folderMtime = folder.getLastModificationTime().toMilliseconds();
+
+    // Try cache first — skip filesystem scan if up to date.
+    if (diskCacheFile.getFullPathName().isNotEmpty())
+    {
+        juce::Array<SampleEntry> cached;
+        if (loadCacheForFolder(folder.getFullPathName(), folderMtime, cached))
+        {
+            samples.addArray(cached);
+            return;
+        }
+    }
 
     // Infer category from folder name
     const juce::String fl = folderName.toLowerCase();
@@ -86,6 +112,7 @@ void SampleLibrary::scanUserFolder(const juce::File& folder,
 
     const auto files = folder.findChildFiles(juce::File::findFiles, true,
                                               "*.wav;*.aiff;*.aif;*.flac");
+    juce::Array<SampleEntry> newEntries;
     for (const auto& f : files)
     {
         SampleEntry e;
@@ -103,8 +130,91 @@ void SampleLibrary::scanUserFolder(const juce::File& folder,
          || pfl.contains("noise") || pfl.contains("hiss") || pfl.contains("hum")
          || pfl.contains("room"))
             e.category = "noise";
-        samples.add(e);
+        newEntries.add(e);
     }
+
+    samples.addArray(newEntries);
+
+    // Persist to cache for next launch.
+    if (diskCacheFile.getFullPathName().isNotEmpty())
+        saveCacheForFolder(folder.getFullPathName(), folderMtime, newEntries);
+}
+
+//==============================================================================
+// Disk cache helpers
+//==============================================================================
+
+bool SampleLibrary::loadCacheForFolder(const juce::String& folderPath,
+                                        juce::int64           folderMtime,
+                                        juce::Array<SampleEntry>& out) const
+{
+    if (! diskCacheFile.existsAsFile()) return false;
+
+    juce::var root;
+    if (! juce::JSON::parse(diskCacheFile.loadFileAsString(), root).wasOk()) return false;
+    if (! root.isObject()) return false;
+
+    const juce::var& folderCache = root[folderPath];
+    if (! folderCache.isObject()) return false;
+
+    // Invalidate if the folder has been modified since the cache was written.
+    if ((juce::int64) folderCache["mtime"] != folderMtime) return false;
+
+    const juce::var& entriesVar = folderCache["entries"];
+    if (! entriesVar.isArray()) return false;
+
+    for (const auto& item : *entriesVar.getArray())
+    {
+        if (! item.isObject()) continue;
+        SampleEntry e;
+        e.name        = item["name"].toString();
+        e.filePath    = item["filePath"].toString();
+        e.category    = item["category"].toString();
+        e.subcategory = item["subcategory"].toString();
+        e.pack        = item["pack"].toString();
+        e.rootNote    = (int) item["rootNote"];
+        e.license     = item["license"].toString();
+        e.source      = item["source"].toString();
+        if (e.name.isNotEmpty()) out.add(e);
+    }
+    return true;
+}
+
+void SampleLibrary::saveCacheForFolder(const juce::String& folderPath,
+                                        juce::int64           folderMtime,
+                                        const juce::Array<SampleEntry>& entries) const
+{
+    // Read existing cache (if any) so we don't overwrite other folders.
+    juce::var root;
+    if (diskCacheFile.existsAsFile())
+        juce::JSON::parse(diskCacheFile.loadFileAsString(), root);
+    if (! root.isObject())
+        root = juce::var(new juce::DynamicObject());
+
+    // Build the entries array.
+    juce::var entriesArray(new juce::Array<juce::var>());
+    for (const auto& e : entries)
+    {
+        auto* obj = new juce::DynamicObject();
+        obj->setProperty("name",        e.name);
+        obj->setProperty("filePath",    e.filePath);
+        obj->setProperty("category",    e.category);
+        obj->setProperty("subcategory", e.subcategory);
+        obj->setProperty("pack",        e.pack);
+        obj->setProperty("rootNote",    e.rootNote);
+        obj->setProperty("license",     e.license);
+        obj->setProperty("source",      e.source);
+        entriesArray.getArray()->add(juce::var(obj));
+    }
+
+    // Build the folder record.
+    auto* folderObj = new juce::DynamicObject();
+    folderObj->setProperty("mtime",   folderMtime);
+    folderObj->setProperty("entries", entriesArray);
+
+    root.getDynamicObject()->setProperty(folderPath, juce::var(folderObj));
+
+    diskCacheFile.replaceWithText(juce::JSON::toString(root, true));
 }
 
 //==============================================================================

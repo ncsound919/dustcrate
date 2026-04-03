@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.22)
 project(DustCrate VERSION 0.1.0)
 
+# ── AddressSanitizer build type ────────────────────────────────────────────────
+# Usage: cmake -B build -DCMAKE_BUILD_TYPE=AddressSanitizer
+if(CMAKE_BUILD_TYPE STREQUAL "AddressSanitizer")
+    set(ASAN_FLAGS "-fsanitize=address -fno-omit-frame-pointer -g")
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   ${ASAN_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS}    ${ASAN_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ASAN_FLAGS}")
+    message(STATUS "AddressSanitizer enabled")
+endif()
+
 add_subdirectory(JUCE)
 
 juce_add_plugin(DustCrate
@@ -32,6 +43,7 @@ target_sources(DustCrate
     Source/MidiLearnManager.cpp
     Source/PresetBrowserBar.cpp
     Source/PresetManager.cpp
+    Source/PresetValidator.cpp
     Source/SamplePreview.cpp
     Source/PackImportWizard.cpp
     Source/MacroLFO.cpp
@@ -75,3 +87,6 @@ juce_add_binary_data(DustCrateAssets
 )
 
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)
+
+# ── Unit tests ─────────────────────────────────────────────────────────────────
+add_subdirectory(Tests)

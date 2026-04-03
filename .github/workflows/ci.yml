@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**', 'hotfix/**' ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Lint: clang-format style check
+  # ────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: clang-format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: |
+          find Source Tests -name '*.cpp' -o -name '*.h' | \
+            xargs clang-format --dry-run --Werror --style=file
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Build + Test matrix
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            cmake_flags: -DCMAKE_BUILD_TYPE=Debug
+            build_targets: >-
+              DustCrate_VST3
+              DustCrate_AU
+              DustCrate_Standalone
+          - os: windows-latest
+            cmake_flags: -DCMAKE_BUILD_TYPE=Debug
+            build_targets: >-
+              DustCrate_VST3
+              DustCrate_Standalone
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── macOS: install Ninja via Homebrew ──────────────────────────────────
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # ── Windows: install Ninja via Chocolatey ─────────────────────────────
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja --yes
+
+      # ── Cache CMake / JUCE build artifacts ────────────────────────────────
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'JUCE/**') }}
+          restore-keys: ${{ runner.os }}-cmake-
+
+      # ── Configure ─────────────────────────────────────────────────────────
+      - name: Configure CMake
+        run: cmake -B build -G Ninja ${{ matrix.cmake_flags }}
+
+      # ── Build plugin targets ───────────────────────────────────────────────
+      - name: Build plugin
+        run: |
+          for target in ${{ matrix.build_targets }}; do
+            cmake --build build --target $target --parallel
+          done
+        shell: bash
+
+      # ── Build + run unit tests ─────────────────────────────────────────────
+      - name: Build tests
+        run: cmake --build build --target DustCrateTests --parallel
+
+      - name: Run tests
+        run: cmake --build build --target run_tests
+        continue-on-error: false  # fail the job if tests fail
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Security: dependency / SAST scanning via GitHub's code-scanning suite
+  # ────────────────────────────────────────────────────────────────────────────
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          queries: security-extended
+
+      - name: Install Ninja + dependencies
+        run: sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxrandr-dev \
+               libxinerama-dev libxcursor-dev libfreetype-dev
+
+      - name: Build for CodeQL
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build --target DustCrate_VST3 --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
