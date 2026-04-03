@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <BinaryData.h>
 
 //==============================================================================
 // DustCrateLookAndFeel
@@ -171,7 +172,6 @@ void CategoryTagBar::paint(juce::Graphics& g)
         juce::Rectangle<float> pill((float)x, 2, (float)tw, (float)ph);
         if (sel)
         {
-            // Outer glow
             g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.2f));
             g.fillRoundedRectangle(pill.expanded(1.5f), ph*.5f+1);
             g.setColour(DustCrateLookAndFeel::amber());
@@ -218,21 +218,18 @@ void SampleBrowserList::setEntries(const juce::Array<SampleEntry>& e) { entries=
 int  SampleBrowserList::getNumRows() { return entries.size(); }
 void SampleBrowserList::paintListBoxItem(int row, juce::Graphics& g, int w, int h, bool sel)
 {
-    // Row background
     if (sel)
     {
         g.setColour(DustCrateLookAndFeel::rowSel()); g.fillRect(0,0,w,h);
         g.setColour(DustCrateLookAndFeel::amberGlow()); g.fillRect(0,0,w,h);
         g.setColour(DustCrateLookAndFeel::amber());  g.fillRect(0,2,3,h-4);
     }
-    // Separator
     g.setColour(DustCrateLookAndFeel::panelBorder().withAlpha(0.4f));
     g.fillRect(0, h-1, w, 1);
 
     if (!juce::isPositiveAndBelow(row, entries.size())) return;
     const auto& e = entries[row];
 
-    // Play triangle
     const float ty = h * 0.5f;
     juce::Path tri;
     tri.startNewSubPath(10.f, ty - 5.f);
@@ -242,7 +239,6 @@ void SampleBrowserList::paintListBoxItem(int row, juce::Graphics& g, int w, int 
     g.setColour(DustCrateLookAndFeel::amber().withAlpha(sel ? 1.0f : 0.35f));
     g.fillPath(tri);
 
-    // Sample name
     const juce::String badge = e.subcategory.isEmpty() ? e.category.toUpperCase().substring(0,4)
                                                         : e.subcategory.substring(0,4);
     const int bw=32, bx=w-bw-6;
@@ -271,21 +267,17 @@ void SectionPanel::paint(juce::Graphics& g)
     auto b = getLocalBounds().toFloat();
     const auto accent = slateAccent ? DustCrateLookAndFeel::slate() : DustCrateLookAndFeel::amber();
 
-    // Panel background
     g.setColour(DustCrateLookAndFeel::panel()); g.fillRoundedRectangle(b, 6);
     g.setColour(DustCrateLookAndFeel::panelBorder()); g.drawRoundedRectangle(b.reduced(.5f), 6, .8f);
 
-    // Header gradient
     juce::ColourGradient hg(accent.withAlpha(0.18f), b.getX(), b.getY(),
                              juce::Colours::transparentBlack, b.getRight(), b.getY(), false);
     g.setGradientFill(hg);
     g.fillRoundedRectangle(b.getX(), b.getY(), b.getWidth(), (float)kHeaderH, 5);
 
-    // Top accent line (2px)
     g.setColour(accent.withAlpha(0.8f));
     g.fillRoundedRectangle(b.getX()+1, b.getY(), b.getWidth()-2, 2, 1);
 
-    // Title shadow then title
     g.setFont(juce::Font("Helvetica Neue", 9.5f, juce::Font::bold));
     g.setColour(juce::Colour(0x44000000));
     g.drawText(title, (int)b.getX()+9, (int)b.getY()+4, (int)b.getWidth()-16, kHeaderH-4, juce::Justification::centredLeft);
@@ -378,16 +370,11 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
 #endif
 
     // ---- Load PNG image assets from BinaryData ----
-    logoImage = juce::ImageCache::getFromMemory(
-        BinaryData::dustcrate_logo_png,           BinaryData::dustcrate_logo_pngSize);
+    // Only load the header banner — the only image drawn directly by the editor.
+    // Section banners are rendered inside their child SectionPanel components via
+    // SectionPanel::paint(); the logo is embedded in the header text rendering.
     headerBannerImage = juce::ImageCache::getFromMemory(
         BinaryData::dustcrate_header_banner_png,  BinaryData::dustcrate_header_banner_pngSize);
-    browserBannerImage = juce::ImageCache::getFromMemory(
-        BinaryData::section_browser_banner_png,   BinaryData::section_browser_banner_pngSize);
-    keysBannerImage = juce::ImageCache::getFromMemory(
-        BinaryData::section_keys_banner_png,      BinaryData::section_keys_banner_pngSize);
-    characterBannerImage = juce::ImageCache::getFromMemory(
-        BinaryData::section_character_banner_png, BinaryData::section_character_banner_pngSize);
 
     // ---- Menu buttons ----
     addAndMakeVisible(menuFileBtn);
@@ -508,7 +495,6 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     soundsPanel.addChildAndMakeVisible(previewTrimSlider);
     soundsPanel.addChildAndMakeVisible(previewTrimLabel);
 
-    // FIX: single-click now loads sample into synth AND sets currentFilePath
     mainList.onSampleSelected = [this](const SampleEntry& e)
     {
         const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
@@ -570,12 +556,11 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     // ---- Filter / Pitch ----
     addAndMakeVisible(filterPanel);
     setupKnob(filterCutoffSlider, cutoffLabel, "CUTOFF");
-    filterCutoffSlider.setSkewFactorFromMidPoint(2000.0f);  // log-scale feel
+    filterCutoffSlider.setSkewFactorFromMidPoint(2000.0f);
     filterPanel.addChildAndMakeVisible(filterCutoffSlider); filterPanel.addChildAndMakeVisible(cutoffLabel);
     setupKnob(filterResSlider, resLabel, "RES");             filterPanel.addChildAndMakeVisible(filterResSlider);    filterPanel.addChildAndMakeVisible(resLabel);
     setupKnob(pitchSlider,     pitchLabel, "PITCH");         filterPanel.addChildAndMakeVisible(pitchSlider);        filterPanel.addChildAndMakeVisible(pitchLabel);
 
-    // LP / HP / BP toggle buttons
     for (auto* btn : {&filterLpBtn, &filterHpBtn, &filterBpBtn})
     {
         btn->setClickingTogglesState(false);
@@ -585,7 +570,6 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     filterLpBtn.onClick = [this] { audioProcessor.apvts.getParameterAsValue("filterType") = 0; updateFilterButtons(); };
     filterHpBtn.onClick = [this] { audioProcessor.apvts.getParameterAsValue("filterType") = 1; updateFilterButtons(); };
     filterBpBtn.onClick = [this] { audioProcessor.apvts.getParameterAsValue("filterType") = 2; updateFilterButtons(); };
-    // Hidden combo kept for APVTS attachment
     styleCombo(filterTypeCombo);
     filterTypeCombo.addItem("Lowpass",1); filterTypeCombo.addItem("Highpass",2); filterTypeCombo.addItem("Bandpass",3);
     filterTypeCombo.setSelectedId(1);
@@ -759,7 +743,7 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.5f)); g.fillRect(0, mh-1, getWidth(), 1);
 
-    // Title — use VelumStroke if loaded (drawn on top of banner image)
+    // Title text drawn on top of banner
     juce::Font titleFont = velumStrokeTypeface
         ? juce::Font(velumStrokeTypeface).withHeight(22.f)
         : juce::Font("Courier New", 22.f, juce::Font::bold);
@@ -777,19 +761,6 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
     g.setColour(DustCrateLookAndFeel::textSec());
     g.setFont(juce::Font("Helvetica Neue", 9, juce::Font::plain));
     g.drawText("v0.1", getWidth()-206, 14, 38, 16, juce::Justification::centred);
-
-    // Section banners (drawn inside their respective areas)
-    if (browserBannerImage.isValid() && !browserBannerArea.isEmpty())
-        g.drawImage(browserBannerImage, browserBannerArea.toFloat(),
-                    juce::RectanglePlacement::stretchToFit);
-
-    if (keysBannerImage.isValid() && !keysBannerArea.isEmpty())
-        g.drawImage(keysBannerImage, keysBannerArea.toFloat(),
-                    juce::RectanglePlacement::stretchToFit);
-
-    if (characterBannerImage.isValid() && !characterBannerArea.isEmpty())
-        g.drawImage(characterBannerImage, characterBannerArea.toFloat(),
-                    juce::RectanglePlacement::stretchToFit);
 
     // ---- Status bar ----
     const int sbH = 16;
@@ -819,10 +790,8 @@ void DustCrateAudioProcessorEditor::resized()
     area.removeFromTop(6);
 
     // Keyboard strip at the bottom
-    // keysBannerArea is left empty: the keyboard component occupies this area directly
     auto keyboardRow = area.removeFromBottom(70);
     keyboard.setBounds(keyboardRow);
-    keysBannerArea = {};
     area.removeFromBottom(4);
 
     const int bottomH = 160;
@@ -842,15 +811,10 @@ void DustCrateAudioProcessorEditor::resized()
     }
 
     // ---- Browser tab (tab 0) ----
-    // Browser split: 62% sounds / 38% noise
     const int sw = int(browserRow.getWidth() * .62f);
     auto sb = browserRow.removeFromLeft(sw).reduced(2);
     auto nb = browserRow.reduced(2);
     soundsPanel.setBounds(sb); noisePanel.setBounds(nb);
-
-    // browserBannerArea: section banners are rendered inside child SectionPanel components
-    // via SectionPanel::paint(); leaving empty so parent paint() does not paint over children.
-    browserBannerArea = {};
 
     {
         auto in = sb.reduced(6); in.removeFromTop(SectionPanel::kHeaderH);
@@ -874,11 +838,10 @@ void DustCrateAudioProcessorEditor::resized()
 
     // ---- Kit tab (tab 1) ----
     {
-        auto kitArea = browserRow;  // same area as browser row (shown/hidden by switchTab)
+        auto kitArea = browserRow;
         mpcKitSection.setBounds(kitArea);
         auto kitInner = kitArea.reduced(6);
         kitInner.removeFromTop(SectionPanel::kHeaderH);
-        // Kit name row
         auto kitNameRow = kitInner.removeFromTop(24);
         kitNameLabel .setBounds(kitNameRow.removeFromLeft(70).reduced(2, 2));
         kitNameEditor.setBounds(kitNameRow.removeFromLeft(160).reduced(2, 2));
@@ -895,7 +858,6 @@ void DustCrateAudioProcessorEditor::resized()
         slicerSection.setBounds(slicerArea);
         auto slicerInner = slicerArea.reduced(6);
         slicerInner.removeFromTop(SectionPanel::kHeaderH);
-        // Slicer toolbar
         auto slicerToolbar = slicerInner.removeFromTop(26);
         sliceAutoBtn  .setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
         sliceEvenBtn  .setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
@@ -928,10 +890,6 @@ void DustCrateAudioProcessorEditor::resized()
     filterPanel    .setBounds(fb);
     characterPanel .setBounds(cb);
 
-    // characterBannerArea: rendered inside the child SectionPanel component via
-    // SectionPanel::paint(); leaving empty so parent paint() does not paint over it.
-    characterBannerArea = {};
-
     // Envelope knobs
     auto placeKnobs = [](juce::Rectangle<int> pb,
         std::initializer_list<std::pair<juce::Slider*,juce::Label*>> items)
@@ -949,17 +907,15 @@ void DustCrateAudioProcessorEditor::resized()
     placeKnobs(eb, {{&attackSlider,&attackLabel},{&decaySlider,&decayLabel},
                     {&sustainSlider,&sustainLabel},{&releaseSlider,&releaseLabel}});
 
-    // Filter panel: LP/HP/BP toggle strip + knobs
+    // Filter panel
     {
         auto in = fb.reduced(4); in.removeFromTop(SectionPanel::kHeaderH + 2);
-        // Toggle strip
         auto toggleRow = in.removeFromTop(22);
         in.removeFromTop(2);
         const int tbw = toggleRow.getWidth() / 3;
         filterLpBtn.setBounds(toggleRow.removeFromLeft(tbw).reduced(2,1));
         filterHpBtn.setBounds(toggleRow.removeFromLeft(tbw).reduced(2,1));
         filterBpBtn.setBounds(toggleRow.reduced(2,1));
-        // Knobs
         const int slotW = in.getWidth() / 3;
         for (auto [s, l] : std::initializer_list<std::pair<juce::Slider*,juce::Label*>>{
             {&filterCutoffSlider,&cutoffLabel},{&filterResSlider,&resLabel},{&pitchSlider,&pitchLabel}})
@@ -997,12 +953,11 @@ void DustCrateAudioProcessorEditor::resized()
 
 
 //==============================================================================
-// Tab switcher — show/hide the four bottom-panel modes
+// Tab switcher
 void DustCrateAudioProcessorEditor::switchTab (int index)
 {
     activeTab = index;
 
-    // Browser tab
     soundsPanel.setVisible  (index == 0);
     noisePanel.setVisible   (index == 0);
     soundTagBar.setVisible  (index == 0);
@@ -1010,7 +965,6 @@ void DustCrateAudioProcessorEditor::switchTab (int index)
     searchBox.setVisible    (index == 0);
     packFilter.setVisible   (index == 0);
 
-    // Kit tab
     mpcKitSection.setVisible (index == 1);
     mpcKitPanel.setVisible   (index == 1);
     mpcExportBtn.setVisible  (index == 1);
@@ -1018,7 +972,6 @@ void DustCrateAudioProcessorEditor::switchTab (int index)
     kitNameEditor.setVisible (index == 1);
     kitNameLabel.setVisible  (index == 1);
 
-    // Slicer tab
     slicerSection.setVisible  (index == 2);
     slicerPanel.setVisible    (index == 2);
     sliceAutoBtn.setVisible   (index == 2);
@@ -1028,11 +981,9 @@ void DustCrateAudioProcessorEditor::switchTab (int index)
     sliceEvenCombo.setVisible (index == 2);
     sliceCountLabel.setVisible(index == 2);
 
-    // MIDI Out tab
     midiOutSection.setVisible  (index == 3);
     midiOutputPanel.setVisible (index == 3);
 
-    // Highlight active tab button
     tabBrowserBtn.setColour (juce::TextButton::buttonColourId,
         index == 0 ? DustCrateLookAndFeel::amber() : DustCrateLookAndFeel::panel());
     tabKitBtn.setColour (juce::TextButton::buttonColourId,
@@ -1048,7 +999,6 @@ void DustCrateAudioProcessorEditor::switchTab (int index)
 //==============================================================================
 void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
 {
-    // Drag a sample from the browser onto a pad
     mainList.onSampleSelected = [this](const SampleEntry& e)
     {
         const juce::File f = audioProcessor.getSampleLibrary().resolveFilePath(e);
@@ -1063,13 +1013,11 @@ void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
         }
     };
 
-    // Audition pad on double-click
     mpcKitPanel.onPadAudition = [this](int /*padIndex*/, const MpcPadSlot& pad)
     {
         audioProcessor.triggerSample (pad.filePath, pad.rootNote, 1.0f);
     };
 
-    // Show pad info in status bar when selected
     mpcKitPanel.onPadSelected = [this](int padIndex)
     {
         auto& pad = mpcKitPanel.getPad (padIndex);
@@ -1077,13 +1025,11 @@ void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
             currentFilePath = pad.filePath;
     };
 
-    // When a sample is assigned, also load it into the slicer
     mpcKitPanel.onPadAssigned = [this](int /*padIndex*/, const MpcPadSlot& pad)
     {
         slicerPanel.loadFile (juce::File (pad.filePath));
     };
 
-    // Export button
     mpcExportBtn.onClick = [this]
     {
         launchMpcExport();
@@ -1101,7 +1047,6 @@ void DustCrateAudioProcessorEditor::setupMpcKitCallbacks()
 
 void DustCrateAudioProcessorEditor::timerCallback()
 {
-    // Flush audio-thread MIDI CC changes to the APVTS safely on the message thread
     audioProcessor.midiLearn.flushCcQueue(audioProcessor.apvts);
 }
 
@@ -1117,16 +1062,11 @@ void DustCrateAudioProcessorEditor::launchMpcExport()
 
     mpcExportEngine.onProgress = [this](float p)
     {
-        // Update the kit name label to show export progress percentage.
-        // Note: since exportKit() runs synchronously on the message thread,
-        // JUCE will not repaint mid-export; this updates the label text so
-        // the final state shows "100%" briefly before the result dialog appears.
         juce::Component::SafePointer<DustCrateAudioProcessorEditor> safeThis (this);
         juce::MessageManager::callAsync([safeThis, p]()
         {
             if (safeThis == nullptr)
                 return;
-
             safeThis->kitNameLabel.setText("KIT NAME  " + juce::String((int)(p * 100)) + "%",
                                            juce::dontSendNotification);
         });
@@ -1185,7 +1125,6 @@ void DustCrateAudioProcessorEditor::setupSlicerCallbacks()
 
     slicerPanel.onMarkerClicked = [this](int samplePos)
     {
-        // Seek to marker position and preview from there
         if (currentFilePath.isEmpty()) return;
         const juce::File f (currentFilePath);
         if (! f.existsAsFile()) return;
@@ -1195,7 +1134,6 @@ void DustCrateAudioProcessorEditor::setupSlicerCallbacks()
         samplePreview.previewFrom (f, posSeconds, (float)previewTrimSlider.getValue());
     };
 
-    // Even-slice count options: 2, 4, 8, 16, 32
     sliceEvenCombo.addItem ("2",  2);
     sliceEvenCombo.addItem ("4",  4);
     sliceEvenCombo.addItem ("8",  8);
@@ -1205,11 +1143,8 @@ void DustCrateAudioProcessorEditor::setupSlicerCallbacks()
 }
 
 //==============================================================================
-// Constructor additions for MPC panels
-// Called at end of DustCrateAudioProcessorEditor constructor
 void DustCrateAudioProcessorEditor::initMpcPanels()
 {
-    // Tab strip buttons
     addAndMakeVisible (tabBrowserBtn);
     addAndMakeVisible (tabKitBtn);
     addAndMakeVisible (tabSlicerBtn);
@@ -1220,7 +1155,6 @@ void DustCrateAudioProcessorEditor::initMpcPanels()
     tabSlicerBtn.onClick  = [this] { switchTab (2); };
     tabMidiBtn.onClick    = [this] { switchTab (3); };
 
-    // MPC Kit panel
     addAndMakeVisible (mpcKitSection);
     addAndMakeVisible (mpcKitPanel);
     addAndMakeVisible (mpcExportBtn);
@@ -1244,7 +1178,6 @@ void DustCrateAudioProcessorEditor::initMpcPanels()
         });
     };
 
-    // Slicer panel
     addAndMakeVisible (slicerSection);
     addAndMakeVisible (slicerPanel);
     addAndMakeVisible (sliceAutoBtn);
@@ -1254,16 +1187,12 @@ void DustCrateAudioProcessorEditor::initMpcPanels()
     addAndMakeVisible (sliceEvenCombo);
     addAndMakeVisible (sliceCountLabel);
 
-    // MIDI Out panel
     addAndMakeVisible (midiOutSection);
     addAndMakeVisible (midiOutputPanel);
 
     setupMpcKitCallbacks();
     setupSlicerCallbacks();
 
-    // Start on browser tab
     switchTab (0);
-
-    // Start timer to flush MIDI-learn CC queue to APVTS on message thread
     startTimerHz(30);
 }

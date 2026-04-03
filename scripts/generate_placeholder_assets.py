@@ -61,10 +61,10 @@ def make_logo():
     img = Image.new("RGB", (200, 60), DARK_BG)
     draw = ImageDraw.Draw(img)
 
-    # Subtle vinyl groove circles
+    # Subtle vinyl groove circles — outline uses 3-tuple (RGB image, no alpha channel)
     for r in range(22, 14, -2):
         draw.ellipse((8 - r + 22, 30 - r, 8 + r + 22, 30 + r),
-                     outline=(*DARK_BG2, 255), width=1)
+                     outline=DARK_BG2, width=1)
     draw.ellipse((22, 26, 30, 34), fill=DARK_BG)
     draw.ellipse((25, 29, 27, 31), fill=AMBER)
 
@@ -104,7 +104,7 @@ def make_header_banner():
     # Amber bottom accent line
     draw.rectangle([0, 78, 800, 79], fill=AMBER_DIM)
 
-    # Logo mark (small crate icon)
+    # Logo mark (small crate icon) — outline uses 3-tuple (RGB image)
     crate_x = 14
     draw.rectangle([crate_x, 22, crate_x + 36, 58], outline=AMBER_DIM, width=1)
     draw.line([(crate_x, 36), (crate_x + 36, 36)], fill=AMBER_DIM, width=1)
@@ -122,7 +122,7 @@ def make_header_banner():
     print("  dustcrate_header_banner.png  (800×80)")
 
 
-# ── 3. section_browser_banner.png ── 800×32 ──────────────────────────────────
+# ── 3–5. Section banners ── 800×32 ───────────────────────────────────────────
 def make_section_banner(filename, label):
     img = Image.new("RGB", (800, 32), DARK_BG2)
     draw = ImageDraw.Draw(img)
@@ -134,7 +134,7 @@ def make_section_banner(filename, label):
     draw.rectangle([0, 0, 800, 0], fill=PANEL_BORDER)
     draw.rectangle([0, 31, 800, 31], fill=PANEL_BORDER)
 
-    # Small icon dot
+    # Small icon dot — outline uses 3-tuple (RGB image)
     draw.ellipse([10, 13, 18, 21], outline=AMBER, width=1)
 
     # Label text
