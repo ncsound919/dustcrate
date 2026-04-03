@@ -245,6 +245,19 @@ private:
         lfoRateAttach, lfoDepthAttach;
     std::unique_ptr<ComboAttachment> filterTypeAttach, lfoShapeAttach, lfoTargetAttach;
 
+    // ---- PNG image assets (loaded from BinaryData) ----
+    juce::Image logoImage;
+    juce::Image headerBannerImage;
+    juce::Image browserBannerImage;
+    juce::Image keysBannerImage;
+    juce::Image characterBannerImage;
+
+    // ---- Banner layout areas (set in resized()) ----
+    juce::Rectangle<int> headerBannerArea;
+    juce::Rectangle<int> browserBannerArea;
+    juce::Rectangle<int> keysBannerArea;
+    juce::Rectangle<int> characterBannerArea;
+
     // ---- Helpers ----
     void setupKnob (juce::Slider&, juce::Label&, const juce::String&, bool slate = false);
     void mouseDown (const juce::MouseEvent&) override;
@@ -256,6 +269,7 @@ private:
     void setupMpcKitCallbacks();
     void setupSlicerCallbacks();
     void launchMpcExport();
+    void initMpcPanels();
     // Timer: flush MIDI-learn CC queue from audio thread → apvts on message thread
     void timerCallback() override;
 

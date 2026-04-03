@@ -377,6 +377,18 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
         BinaryData::VelumStroke_ttf, BinaryData::VelumStroke_ttfSize);
 #endif
 
+    // ---- Load PNG image assets from BinaryData ----
+    logoImage = juce::ImageCache::getFromMemory(
+        BinaryData::dustcrate_logo_png,           BinaryData::dustcrate_logo_pngSize);
+    headerBannerImage = juce::ImageCache::getFromMemory(
+        BinaryData::dustcrate_header_banner_png,  BinaryData::dustcrate_header_banner_pngSize);
+    browserBannerImage = juce::ImageCache::getFromMemory(
+        BinaryData::section_browser_banner_png,   BinaryData::section_browser_banner_pngSize);
+    keysBannerImage = juce::ImageCache::getFromMemory(
+        BinaryData::section_keys_banner_png,      BinaryData::section_keys_banner_pngSize);
+    characterBannerImage = juce::ImageCache::getFromMemory(
+        BinaryData::section_character_banner_png, BinaryData::section_character_banner_pngSize);
+
     // ---- Menu buttons ----
     addAndMakeVisible(menuFileBtn);
     addAndMakeVisible(menuSettingsBtn);
@@ -628,6 +640,7 @@ DustCrateAudioProcessorEditor::DustCrateAudioProcessorEditor(DustCrateAudioProce
     keyboardState.addListener(keyboardListener.get());
 
     refreshBrowsers();
+    initMpcPanels();
 }
 
 DustCrateAudioProcessorEditor::~DustCrateAudioProcessorEditor()
@@ -738,9 +751,15 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
     juce::ColourGradient hdr(juce::Colour(0xff1e2022), getWidth()*.5f, 0,
                               DustCrateLookAndFeel::body(), 0, 0, true);
     g.setGradientFill(hdr); g.fillRect(0, 0, getWidth(), mh);
+
+    // Header banner image (drawn over gradient if valid)
+    if (headerBannerImage.isValid())
+        g.drawImage(headerBannerImage, headerBannerArea.toFloat(),
+                    juce::RectanglePlacement::stretchToFit);
+
     g.setColour(DustCrateLookAndFeel::amber().withAlpha(0.5f)); g.fillRect(0, mh-1, getWidth(), 1);
 
-    // Title — use VelumStroke if loaded
+    // Title — use VelumStroke if loaded (drawn on top of banner image)
     juce::Font titleFont = velumStrokeTypeface
         ? juce::Font(velumStrokeTypeface).withHeight(22.f)
         : juce::Font("Courier New", 22.f, juce::Font::bold);
@@ -759,6 +778,19 @@ void DustCrateAudioProcessorEditor::paint(juce::Graphics& g)
     g.setFont(juce::Font("Helvetica Neue", 9, juce::Font::plain));
     g.drawText("v0.1", getWidth()-206, 14, 38, 16, juce::Justification::centred);
 
+    // Section banners (drawn inside their respective areas)
+    if (browserBannerImage.isValid() && !browserBannerArea.isEmpty())
+        g.drawImage(browserBannerImage, browserBannerArea.toFloat(),
+                    juce::RectanglePlacement::stretchToFit);
+
+    if (keysBannerImage.isValid() && !keysBannerArea.isEmpty())
+        g.drawImage(keysBannerImage, keysBannerArea.toFloat(),
+                    juce::RectanglePlacement::stretchToFit);
+
+    if (characterBannerImage.isValid() && !characterBannerArea.isEmpty())
+        g.drawImage(characterBannerImage, characterBannerArea.toFloat(),
+                    juce::RectanglePlacement::stretchToFit);
+
     // ---- Status bar ----
     const int sbH = 16;
     g.setColour(juce::Colour(0xff111213));
@@ -774,26 +806,51 @@ void DustCrateAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds();
     const int statusBarH = 16;
+    const int headerH    = 44;
+
     area.removeFromBottom(statusBarH);
-    area.removeFromTop(44);
+
+    // Record the header banner area before consuming it
+    headerBannerArea = area.removeFromTop(headerH);
+
     presetBar.setBounds(area.removeFromTop(32));
     area.reduce(8, 8);
     waveform.setBounds(area.removeFromTop(48));
     area.removeFromTop(6);
 
     // Keyboard strip at the bottom
-    keyboard.setBounds(area.removeFromBottom(70));
+    // keysBannerArea is left empty: the keyboard component occupies this area directly
+    auto keyboardRow = area.removeFromBottom(70);
+    keyboard.setBounds(keyboardRow);
+    keysBannerArea = {};
     area.removeFromBottom(4);
 
     const int bottomH = 160;
     auto browserRow = area.removeFromTop(area.getHeight() - bottomH - 6);
     area.removeFromTop(6);
 
+    // ---- Tab buttons strip above the browser row ----
+    const int tabH = 28;
+    auto tabStrip = browserRow.removeFromTop(tabH);
+    browserRow.removeFromTop(4);
+    {
+        const int tbw = tabStrip.getWidth() / 4;
+        tabBrowserBtn.setBounds(tabStrip.removeFromLeft(tbw).reduced(2, 2));
+        tabKitBtn    .setBounds(tabStrip.removeFromLeft(tbw).reduced(2, 2));
+        tabSlicerBtn .setBounds(tabStrip.removeFromLeft(tbw).reduced(2, 2));
+        tabMidiBtn   .setBounds(tabStrip.reduced(2, 2));
+    }
+
+    // ---- Browser tab (tab 0) ----
     // Browser split: 62% sounds / 38% noise
     const int sw = int(browserRow.getWidth() * .62f);
     auto sb = browserRow.removeFromLeft(sw).reduced(2);
     auto nb = browserRow.reduced(2);
     soundsPanel.setBounds(sb); noisePanel.setBounds(nb);
+
+    // browserBannerArea: section banners are rendered inside child SectionPanel components
+    // via SectionPanel::paint(); leaving empty so parent paint() does not paint over children.
+    browserBannerArea = {};
 
     {
         auto in = sb.reduced(6); in.removeFromTop(SectionPanel::kHeaderH);
@@ -815,18 +872,65 @@ void DustCrateAudioProcessorEditor::resized()
         noiseList.setBounds(in);
     }
 
+    // ---- Kit tab (tab 1) ----
+    {
+        auto kitArea = browserRow;  // same area as browser row (shown/hidden by switchTab)
+        mpcKitSection.setBounds(kitArea);
+        auto kitInner = kitArea.reduced(6);
+        kitInner.removeFromTop(SectionPanel::kHeaderH);
+        // Kit name row
+        auto kitNameRow = kitInner.removeFromTop(24);
+        kitNameLabel .setBounds(kitNameRow.removeFromLeft(70).reduced(2, 2));
+        kitNameEditor.setBounds(kitNameRow.removeFromLeft(160).reduced(2, 2));
+        auto kitBtnRow = kitNameRow;
+        mpcExportBtn.setBounds(kitBtnRow.removeFromLeft(110).reduced(2, 2));
+        mpcClearBtn .setBounds(kitBtnRow.removeFromLeft(80).reduced(2, 2));
+        kitInner.removeFromTop(4);
+        mpcKitPanel.setBounds(kitInner);
+    }
+
+    // ---- Slicer tab (tab 2) ----
+    {
+        auto slicerArea = browserRow;
+        slicerSection.setBounds(slicerArea);
+        auto slicerInner = slicerArea.reduced(6);
+        slicerInner.removeFromTop(SectionPanel::kHeaderH);
+        // Slicer toolbar
+        auto slicerToolbar = slicerInner.removeFromTop(26);
+        sliceAutoBtn  .setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
+        sliceEvenBtn  .setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
+        sliceEvenCombo.setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
+        sliceClearBtn .setBounds(slicerToolbar.removeFromLeft(60).reduced(2, 2));
+        sliceExportBtn.setBounds(slicerToolbar.removeFromLeft(100).reduced(2, 2));
+        sliceCountLabel.setBounds(slicerToolbar.reduced(2, 2));
+        slicerInner.removeFromTop(4);
+        slicerPanel.setBounds(slicerInner);
+    }
+
+    // ---- MIDI Out tab (tab 3) ----
+    {
+        auto midiArea = browserRow;
+        midiOutSection.setBounds(midiArea);
+        auto midiInner = midiArea.reduced(6);
+        midiInner.removeFromTop(SectionPanel::kHeaderH);
+        midiOutputPanel.setBounds(midiInner);
+    }
+
     // ---- Controls row ----
     auto controls = area;
     const int gap = 6;
     const int ew  = int(controls.getWidth() * .28f);
     const int fw  = int(controls.getWidth() * .26f);
-    const int cw  = controls.getWidth() - ew - fw - 2*gap;
     auto eb = controls.removeFromLeft(ew);  controls.removeFromLeft(gap);
     auto fb = controls.removeFromLeft(fw);  controls.removeFromLeft(gap);
     auto cb = controls;
     envelopePanel  .setBounds(eb);
     filterPanel    .setBounds(fb);
     characterPanel .setBounds(cb);
+
+    // characterBannerArea: rendered inside the child SectionPanel component via
+    // SectionPanel::paint(); leaving empty so parent paint() does not paint over it.
+    characterBannerArea = {};
 
     // Envelope knobs
     auto placeKnobs = [](juce::Rectangle<int> pb,
@@ -888,6 +992,7 @@ void DustCrateAudioProcessorEditor::resized()
     // Menu buttons in header
     menuSettingsBtn.setBounds(getWidth()-88,  10, 80, 24);
     menuFileBtn    .setBounds(getWidth()-170, 10, 76, 24);
+    menuMpcBtn     .setBounds(getWidth()-254, 10, 80, 24);
 }
 
 

@@ -61,10 +61,17 @@ target_link_libraries(DustCrate
 
 # Binary assets compiled into the plugin binary.
 # NOTE: SedgwickAveDisplay-Regular.ttf is included for optional display use.
+# NOTE: PNG images in assets/images/ are placeholder branding assets;
+#       a designer can replace them without changing any source code.
 juce_add_binary_data(DustCrateAssets
     SOURCES
     packs/factory_pack.json
     assets/fonts/SedgwickAveDisplay-Regular.ttf
+    assets/images/dustcrate_logo.png
+    assets/images/dustcrate_header_banner.png
+    assets/images/section_browser_banner.png
+    assets/images/section_keys_banner.png
+    assets/images/section_character_banner.png
 )
 
 target_link_libraries(DustCrate PRIVATE DustCrateAssets)
