@@ -61,6 +61,9 @@ bool PresetManager::loadPreset(const juce::String& name)
         migratePreset(*xml, fileVersion);
 
     // Validate structure and schema version.
+    if (! xml->hasAttribute("schemaVersion"))
+        xml->setAttribute("schemaVersion", 1);
+
     const auto validation = PresetValidator::validatePresetXml(*xml, apvts.state.getType());
     if (! validation.ok)
     {
